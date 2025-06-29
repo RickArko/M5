@@ -1,0 +1,15 @@
+[project]
+name = "Solution for the M5 Forecasting Competition"
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+skip_gitignore = true
+atomic = true
+profile = "black"
+indent = 4
+line_length = 88
+lines_after_imports = 2
+multi_line_output = 3
+include_trailing_comma = true
