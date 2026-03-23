@@ -71,10 +71,10 @@ def filter_data(dflong: pd.DataFrame,
                 last_n: int = None) -> pd.DataFrame:
     """Filter data by removing leading zeros and only keeping last {last_n} days of data for each unique series.
     """
-    logger.info(f"""Rows of input data: {dflong.shape[0]:,d}""")
-
     dflong = dflong.sort_values(["id", "date"])
     dates = sorted(dflong["date"].unique())
+
+    logger.info(f"""Rows of input data: {dflong.shape[0]:,d} for {len(dates):,d} days of Sales""")
 
     if last_n is not None:
         logger.info(f"""Drop training data older than {last_n:,d} days old""")
@@ -82,7 +82,7 @@ def filter_data(dflong: pd.DataFrame,
     else:
         above_min_date = True
 
-
+    # Boolean index flag items without zero days
     without_leading_zeros = dflong["y"].gt(0).groupby(dflong["id"], observed=True).transform("cummax")
 
     keep_mask = without_leading_zeros & above_min_date
@@ -137,27 +137,51 @@ def reduce_mem_usage(df: pd.DataFrame, verbose: bool=True) -> pd.DataFrame:
     """
     numerics = ["int16", "int32", "int64", "float16", "float32", "float64"]
     start_mem = df.memory_usage().sum() / 1024**2
+    
     for col in df.columns:
         col_type = df[col].dtypes
         if col_type in numerics:
+            # Skip columns with NaN values to avoid casting issues
+            if df[col].isna().any():
+                continue
+                
             c_min = df[col].min()
             c_max = df[col].max()
+            
+            # Skip if values are too large to avoid overflow warnings
+            if abs(c_min) > 1e15 or abs(c_max) > 1e15:
+                continue
+            
             if str(col_type)[:3] == "int":
-                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                if c_min >= np.iinfo(np.int8).min and c_max <= np.iinfo(np.int8).max:
                     df[col] = df[col].astype(np.int8)
-                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                elif c_min >= np.iinfo(np.int16).min and c_max <= np.iinfo(np.int16).max:
                     df[col] = df[col].astype(np.int16)
-                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                elif c_min >= np.iinfo(np.int32).min and c_max <= np.iinfo(np.int32).max:
                     df[col] = df[col].astype(np.int32)
-                elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
+                elif c_min >= np.iinfo(np.int64).min and c_max <= np.iinfo(np.int64).max:
                     df[col] = df[col].astype(np.int64)
             else:
-                if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
-                    df[col] = df[col].astype(np.float16)
-                elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
-                    df[col] = df[col].astype(np.float32)
+                # Avoid float16 for key statistical columns to prevent overflow
+                statistical_columns = ['y', 'sell_price']  # These will be used in statistical calculations
+                
+                if col in statistical_columns:
+                    # Use float32 for statistical columns to avoid overflow issues
+                    if abs(c_min) <= 3.4e38 and abs(c_max) <= 3.4e38:
+                        if c_min >= np.finfo(np.float32).min and c_max <= np.finfo(np.float32).max:
+                            df[col] = df[col].astype(np.float32)
+                    else:
+                        df[col] = df[col].astype(np.float64)
                 else:
-                    df[col] = df[col].astype(np.float64)
+                    # For non-statistical columns, be more conservative with float16
+                    if abs(c_min) <= 60000 and abs(c_max) <= 60000 and not np.isinf(c_min) and not np.isinf(c_max):
+                        if c_min >= np.finfo(np.float16).min and c_max <= np.finfo(np.float16).max:
+                            df[col] = df[col].astype(np.float16)
+                    elif abs(c_min) <= 3.4e38 and abs(c_max) <= 3.4e38:
+                        if c_min >= np.finfo(np.float32).min and c_max <= np.finfo(np.float32).max:
+                            df[col] = df[col].astype(np.float32)
+                    else:
+                        df[col] = df[col].astype(np.float64)
     end_mem = df.memory_usage().sum() / 1024**2
     if verbose:
         logger.info(
@@ -202,17 +226,35 @@ def get_dfids(path_input: Path = PATH_INPUT):
     return truth[id_columns]
 
 
+def make_submission(preds: pd.DataFrame,
+                    h: int) -> pd.DataFrame:
+    """
+    Create wide=submission formatted DataFrame from dataframe of long formatted predictions.
+    """
+    wide = preds.pivot_table(index='id',
+                             columns='date',
+                             observed=True)
+    wide.columns = [f'F{i+1}' for i in range(h)]
+    wide.columns.name = None
+    wide.index.name = 'id'
+    return wide
+
+
 if __name__ == "__main__":
     start_time = time.time()
     cal = load_calendar(PATH_INPUT)
     prices = load_prices(PATH_INPUT)
     sales = load_sales(PATH_INPUT, prices)
 
-    LAST_N_DAYS = 400
-    df = create_m5_fit_data(sales, cal, prices, id_vars=id_cols, last_n=LAST_N_DAYS)
+    df = create_m5_fit_data(sales, cal, prices, id_vars=id_cols, last_n=None)
     df = reduce_mem_usage(df, verbose=True)
     
-    path_local_output = "data/train.snap.parquet"
-    logger.info(f"Saving training data to ... {path_local_output}")
-    df.to_parquet(path_local_output)
+    path_local_data = "data/train.snap.parquet"
+    path_fit_data = "data/fit.snap.parquet"
+
+    logger.info(f"Saving M5 data to ... {path_local_data}")
+    df.to_parquet(path_local_data)
+
+    LAST_N_DAYS = 400
+    df = filter_data(df, last_n=LAST_N_DAYS)
     logger.info(f"""Finished processing training data in {time.time()-start_time:,.1f} seconds.""")

@@ -1,6 +1,16 @@
-micromamba create -f conda-env.yml
+@echo off
+echo Setting up M5 project with uv...
 
-micromamba run -n m5 python -m ipykernel install --user --name m5 --display-name "m5"
+echo Creating virtual environment and installing dependencies...
+uv sync
 
-micromamba run -n m5 python src/generate_data.py
-micromamba run -n m5 python src/process.py
+echo Installing Jupyter kernel...
+uv run python -m ipykernel install --user --name m5 --display-name "m5"
+
+echo Running data generation...
+uv run python src/generate_data.py
+
+echo Running data processing...
+uv run python src/process.py
+
+echo Setup complete!
