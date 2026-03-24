@@ -1,16 +1,18 @@
-@echo off
-echo Setting up M5 project with uv...
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo Creating virtual environment and installing dependencies...
+echo "Setting up M5 project with uv..."
+
+echo "Creating virtual environment and installing dependencies (editable)..."
 uv sync --all-groups
 
-echo Installing Jupyter kernel...
+echo "Installing Jupyter kernel..."
 uv run python -m ipykernel install --user --name m5 --display-name "m5"
 
-echo Running data generation...
+echo "Running data generation..."
 uv run python src/generate_data.py
 
-echo Running data processing...
+echo "Running data processing..."
 uv run python src/process.py
 
-echo Setup complete!
+echo "Setup complete!"
