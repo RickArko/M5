@@ -1,5 +1,7 @@
 # M5 Forecasting Accuracy — reproducible Nixtla solution
 
+[![CI](https://github.com/RickArko/M5/actions/workflows/ci.yml/badge.svg)](https://github.com/RickArko/M5/actions/workflows/ci.yml)
+
 Daily 28-day forecast for **30,490 Walmart product–store series** (Kaggle
 [M5 Forecasting – Accuracy](https://kaggle.com/competitions/m5-forecasting-accuracy)).
 Goal: get close to world-class with as few features as possible — three model
@@ -118,6 +120,39 @@ M5_N_SERIES=500 make prep        # subsample 500 series
 M5_N_WINDOWS=1 make cv-lgbm      # single CV window for fast iteration
 LOG_LEVEL=DEBUG make prep        # verbose logs
 ```
+
+## Install as a package
+
+The repo is a `hatchling`-built distribution, so the `m5` package is
+`pip install`-able outside the dev workflow. Use this when you want the CLI and
+library available in another environment without cloning + running `make`.
+
+```bash
+# from a built wheel
+uv build                         # → dist/m5-0.1.0-py3-none-any.whl
+pip install dist/m5-0.1.0-py3-none-any.whl
+
+# directly from GitHub (no clone)
+pip install "m5 @ git+https://github.com/RickArko/M5.git@main"
+
+# editable install for development
+pip install -e .
+
+# verify
+python -c "import m5; print(m5.__version__)"
+m5 --help
+```
+
+The CLI entry point (`m5 = "m5.cli:app"`) is registered via
+`[project.scripts]` in `pyproject.toml`, so `m5 --help` works from any
+environment that has the wheel installed. Data, artifacts, and forecast
+directories still come from `SETTINGS` / `.env`, so set `DATA_DIR` to a
+writable path before running pipeline commands from an installed copy.
+
+CI (`.github/workflows/ci.yml`) builds the wheel on every push and PR and
+verifies it installs + imports + runs the CLI in a clean venv.
+A tag-triggered `release.yml` is wired for PyPI publishing via Trusted
+Publishers — see the comments at the top of that workflow to enable it.
 
 ## Project layout
 
