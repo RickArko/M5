@@ -102,6 +102,12 @@ ignore_errors = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short --strict-markers"
+markers = [
+    "smoke: Fast sanity checks — imports, CLI help, package metadata. Run on every save.",
+    "unit: Pure-function tests for config, data shaping, features, evaluation.",
+    "integration: End-to-end on toy data — models, cross-validation, pipeline.",
+    "slow: Wall-clock > ~5s; skip in tight loops with `-m 'not slow'`.",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",

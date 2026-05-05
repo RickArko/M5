@@ -2,7 +2,8 @@
 # Linux/macOS/WSL only. `make help` to see everything.
 
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap install lint fmt typecheck test cov check \
+.PHONY: help bootstrap install lint fmt typecheck test test-smoke test-unit \
+        test-integration test-fast cov check \
         download prep cv-stats cv-lgbm forecast-stats forecast-lgbm \
         notebook clean clean-all
 
@@ -40,10 +41,22 @@ fmt: ## Format with ruff
 typecheck: ## mypy on src/m5
 	$(UV) run mypy
 
-test: ## Run pytest
+test: ## Run the full pytest suite (smoke + unit + integration)
 	$(UV) run pytest
 
-cov: ## Run pytest with coverage
+test-smoke: ## Smoke tier — imports, CLI help, package metadata (~1s)
+	$(UV) run pytest -m smoke
+
+test-unit: ## Unit tier — pure-function tests on config/data/features/eval
+	$(UV) run pytest -m unit
+
+test-integration: ## Integration tier — model fit/predict + CV on toy data
+	$(UV) run pytest -m integration
+
+test-fast: ## Smoke + unit (skip integration and `slow`)
+	$(UV) run pytest -m "smoke or unit" --no-cov -q
+
+cov: ## Run the suite with coverage (terminal + htmlcov/)
 	$(UV) run pytest --cov=m5 --cov-report=term-missing --cov-report=html
 
 check: lint typecheck test ## Lint + types + tests (CI entry point)
