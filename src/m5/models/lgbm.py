@@ -6,6 +6,7 @@ date features, snap flag, single event flag, normalised price. No mega-blender.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import lightgbm as lgb
@@ -15,6 +16,7 @@ from mlforecast.lag_transforms import RollingMean
 
 from m5.config import SETTINGS
 from m5.features import build_feature_frame
+from m5.logging import logger
 
 DEFAULT_LAGS: tuple[int, ...] = (7, 14, 28)
 DEFAULT_ROLLS: tuple[int, ...] = (7, 28)
@@ -85,6 +87,9 @@ def fit_predict_lgbm(
     features are used; otherwise the model is trained on lags + date features
     + static categoricals only, so ``.predict(h)`` works without a future frame.
     """
+    n_rows, n_series = len(df), df["unique_id"].nunique()
+    logger.info(f"fit_predict_lgbm: features → {n_series:,d} series × {n_rows // max(n_series, 1):,d} rows each")
+    t0 = time.time()
     df = build_feature_frame(df.copy())
     statics_present = [c for c in static_cols if c in df.columns]
     df = encode_static_categoricals(df, statics_present)
@@ -95,5 +100,9 @@ def fit_predict_lgbm(
 
     keep_cols = ["unique_id", "ds", "y", *statics_present, *dynamic_cols]
     fcst = build_lgbm_forecaster()
+    logger.info(f"fit_predict_lgbm: fitting LightGBM (h={horizon}, dynamic={len(dynamic_cols)} cols)")
     fcst.fit(df[keep_cols], static_features=statics_present)
-    return fcst.predict(h=horizon, X_df=X_df) if X_df is not None else fcst.predict(h=horizon)
+    logger.info(f"fit_predict_lgbm: fit done in {time.time() - t0:.1f}s — predicting")
+    out = fcst.predict(h=horizon, X_df=X_df) if X_df is not None else fcst.predict(h=horizon)
+    logger.info(f"fit_predict_lgbm: total {time.time() - t0:.1f}s, {len(out):,d} forecast rows")
+    return out

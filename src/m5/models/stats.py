@@ -6,11 +6,14 @@ was a top-tier baseline in the original competition.
 
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 from statsforecast import StatsForecast
 from statsforecast.models import AutoETS, SeasonalNaive, Theta
 
 from m5.config import SETTINGS
+from m5.logging import logger
 
 DEFAULT_FREQ = "D"
 DEFAULT_SEASON = 7  # weekly seasonality on daily retail data
@@ -38,6 +41,12 @@ def fit_predict_stats(
     season_length: int = DEFAULT_SEASON,
 ) -> pd.DataFrame:
     """Train statistical baselines and return a long forecast frame."""
+    n_series = df["unique_id"].nunique()
+    logger.info(f"fit_predict_stats: Theta+AutoETS+SeasonalNaive on {n_series:,d} series, h={horizon}")
+    t0 = time.time()
     sf = build_stats_forecaster(season_length=season_length)
     sf.fit(df=df[["unique_id", "ds", "y"]])
-    return sf.predict(h=horizon)
+    logger.info(f"fit_predict_stats: fit done in {time.time() - t0:.1f}s — predicting")
+    out = sf.predict(h=horizon)
+    logger.info(f"fit_predict_stats: total {time.time() - t0:.1f}s, {len(out):,d} forecast rows")
+    return out

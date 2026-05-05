@@ -12,6 +12,11 @@ HORIZON  ?= 28
 WINDOWS  ?= 3
 MODEL    ?= stats
 
+# Silence statsforecast's docstring SyntaxWarnings (cosmetic noise from raw-string
+# escapes). They fire at compile time before any code-level filter can run, so
+# this env-var-based filter is the only reliable knob.
+export PYTHONWARNINGS := ignore::SyntaxWarning
+
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "; \
 	             printf "\nM5 Forecasting — make targets\n\nUsage: make <target> [VAR=value]\n\n"} \

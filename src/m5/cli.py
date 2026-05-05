@@ -99,7 +99,9 @@ def forecast(
     from m5.models.stats import fit_predict_stats
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
+    logger.info(f"forecast {model}: loading {long_path}")
     df = pd.read_parquet(long_path)
+    logger.info(f"forecast {model}: loaded {len(df):,d} rows, {df['unique_id'].nunique():,d} series")
 
     if model == "stats":
         out_df = fit_predict_stats(df, horizon=horizon)
