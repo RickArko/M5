@@ -1,0 +1,27 @@
+# M5 — Hierarchical reconciliation recipe.
+#
+# Mirrors src/m5/models/hierarchical.py:
+#   Theta @ season_length=7 as the base learner at every aggregation level,
+#   reconciled via BottomUp + TopDown(forecast_proportions) + MinTrace(OLS) + MinTrace(mint_shrink).
+
+task:
+  name: m5
+  id_col: unique_id
+  time_col: ds
+  target_col: y
+  freq: D
+  horizon: 28
+  static_cols: [item_id, dept_id, cat_id, store_id, state_id]
+  dynamic_cols: []
+  drop_leading_zeros: true
+
+model:
+  kind: hier
+  base_model:
+    name: Theta
+    season_length: 7
+    alias: Theta
+  reconcilers: [BU, TD_fp, MinT_OLS, MinT_shrink]
+
+cv:
+  n_windows: 3

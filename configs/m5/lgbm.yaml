@@ -1,0 +1,44 @@
+# M5 — LightGBM global model recipe.
+#
+# Mirrors src/m5/models/lgbm.py:lgbm_params + DEFAULT_LAGS + DEFAULT_ROLLS exactly.
+# Equivalence is pinned by tests/unit/test_recipes.py.
+#
+# `seed` is intentionally omitted — it's a runtime knob (M5_SEED env var, see .env.example)
+# and is injected at build time from m5.config.SETTINGS.
+
+task:
+  name: m5
+  id_col: unique_id
+  time_col: ds
+  target_col: y
+  freq: D
+  horizon: 28
+  static_cols: [item_id, dept_id, cat_id, store_id, state_id]
+  dynamic_cols: [snap, is_event, price_norm, price_change_pct]
+  drop_leading_zeros: true
+
+model:
+  kind: lgbm
+  params:
+    objective: tweedie
+    tweedie_variance_power: 1.1
+    metric: rmse
+    learning_rate: 0.05
+    num_leaves: 128
+    min_data_in_leaf: 100
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    n_estimators: 1500
+    verbosity: -1
+    deterministic: true
+    force_row_wise: true
+  lags:
+    lags: [7, 14, 28]
+    rolling_means_lagged:
+      1: [7, 28]
+    differences: []
+  date_features: [dayofweek, day, week, month, year]
+
+cv:
+  n_windows: 3

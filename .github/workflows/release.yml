@@ -1,0 +1,121 @@
+name: M5 Release
+
+# Tag-triggered build + publish to PyPI via Trusted Publishers (OIDC, no API token).
+#
+# To enable PyPI publishing once:
+#   1. Create the project on https://pypi.org/manage/account/publishing/ as a
+#      "Pending publisher" with: owner = <github-user>, repo = M5,
+#      workflow = release.yml, environment = pypi.
+#   2. In this repo's GitHub settings → Environments, create an environment
+#      named `pypi` (no secrets needed — OIDC handles auth).
+#   3. Push a tag: `git tag v0.1.1 && git push origin v0.1.1`.
+#
+# Until step 1 is done, the `publish` job will fail with a clear PyPI auth
+# error. The `build` job is independent and will always run, producing
+# downloadable artifacts on the workflow run page.
+#
+# For TestPyPI dry runs, change `repository-url` in the publish step to
+# https://test.pypi.org/legacy/ and use a TestPyPI Trusted Publisher.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (defaults to current)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          pkg="$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          if [[ "$tag" != "$pkg" ]]; then
+            echo "::error::Tag v$tag does not match pyproject version $pkg" >&2
+            exit 1
+          fi
+          echo "Tag v$tag matches pyproject version $pkg"
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Smoke-install wheel
+        run: |
+          uv venv /tmp/release-venv
+          # shellcheck disable=SC1091
+          . /tmp/release-venv/bin/activate
+          uv pip install dist/m5-*.whl
+          python -c "import m5; print('m5 version:', m5.__version__)"
+          m5 --help > /dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m5-dist
+          path: dist/*
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "## Build"
+            echo "- Ref: \`${{ github.event.inputs.ref || github.ref }}\`"
+            echo "- Status: ${{ job.status }}"
+            echo "- Artifacts: \`m5-dist\` (30d retention)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/m5
+    permissions:
+      id-token: write   # OIDC token for Trusted Publishers
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: m5-dist
+          path: dist/
+
+      - name: Publish via Trusted Publishers
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # repository-url: https://test.pypi.org/legacy/   # uncomment for TestPyPI
+          print-hash: true
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "## Publish"
+            echo "- Tag: \`${{ github.ref_name }}\`"
+            echo "- Status: ${{ job.status }}"
+            echo "- PyPI: https://pypi.org/project/m5/"
+          } >> "$GITHUB_STEP_SUMMARY"

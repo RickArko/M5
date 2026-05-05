@@ -1,0 +1,25 @@
+{
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-renderers",
+        "ms-toolsai.vscode-jupyter-cell-tags",
+        "ms-toolsai.vscode-jupyter-slideshow",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "mechatroner.rainbow-csv",
+        "redhat.vscode-yaml",
+        "editorconfig.editorconfig",
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        "streetsidesoftware.code-spell-checker",
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+        "foxundermoon.shell-format",
+        "timonwong.shellcheck",
+        "aaron-bond.better-comments",
+        "ms-vscode.makefile-tools"
+    ]
+}
