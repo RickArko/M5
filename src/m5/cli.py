@@ -69,11 +69,12 @@ def cv(
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
     df = pd.read_parquet(long_path)
 
-    runner = {"stats": stats_cv, "lgbm": lgbm_cv}.get(model)
-    if runner is None:
+    if model == "stats":
+        cv_df = stats_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "lgbm":
+        cv_df = lgbm_cv(df, h=horizon, n_windows=n_windows)
+    else:
         raise typer.BadParameter(f"Unknown model: {model!r}. Use 'stats' or 'lgbm'.")
-
-    cv_df = runner(df, h=horizon, n_windows=n_windows)
     components = compute_components(df[df["ds"] < cv_df["ds"].min()])
     truth = cv_df.rename(columns={"y": "y"})[["unique_id", "ds", "y"]]
     scores = wrmsse_for_models(truth, cv_df, components)
@@ -97,10 +98,12 @@ def forecast(
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
     df = pd.read_parquet(long_path)
 
-    runner = {"stats": fit_predict_stats, "lgbm": fit_predict_lgbm}.get(model)
-    if runner is None:
+    if model == "stats":
+        out_df = fit_predict_stats(df, horizon=horizon)
+    elif model == "lgbm":
+        out_df = fit_predict_lgbm(df, horizon=horizon)
+    else:
         raise typer.BadParameter(f"Unknown model: {model!r}.")
-    out_df = runner(df, horizon=horizon)
 
     out = SETTINGS.forecasts_dir / f"forecast_{model}.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)

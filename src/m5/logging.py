@@ -9,10 +9,11 @@ from loguru import logger as _logger
 
 
 def configure(level: str | None = None) -> None:
+    resolved_level = level or os.getenv("LOG_LEVEL") or "INFO"
     _logger.remove()
     _logger.add(
         sys.stderr,
-        level=level or os.getenv("LOG_LEVEL", "INFO"),
+        level=resolved_level,
         format="<green>{time:HH:mm:ss}</green> | <level>{level: <7}</level> | "
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     )

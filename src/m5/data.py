@@ -10,6 +10,7 @@ Schema convention (Nixtla):
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ ID_COLS = ["unique_id", "item_id", "dept_id", "cat_id", "store_id", "state_id"]
 EVENT_COLS = ["event_name_1", "event_type_1", "event_name_2", "event_type_2"]
 
 
-def _calendar_dtypes() -> dict[str, str | type]:
+def _calendar_dtypes() -> dict[str, Any]:
     return {
         "wm_yr_wk": np.uint16,
         "event_name_1": "category",
@@ -38,7 +39,7 @@ def load_calendar(raw_dir: Path) -> pd.DataFrame:
     dtypes = _calendar_dtypes()
     cal = pd.read_csv(
         raw_dir / "calendar.csv",
-        dtype=dtypes,
+        dtype=dtypes,  # type: ignore[arg-type]  # pandas-stubs disallows numpy dtype objects
         usecols=[*dtypes.keys(), "date"],
         parse_dates=["date"],
     )
@@ -62,7 +63,7 @@ def load_prices(raw_dir: Path) -> pd.DataFrame:
 
 def load_sales(raw_dir: Path, prices: pd.DataFrame, n_days: int = 1941) -> pd.DataFrame:
     """Load wide sales (one column per d_*) using the *evaluation* split."""
-    dtypes: dict[str, object] = {
+    dtypes: dict[str, Any] = {
         "id": "category",
         "item_id": prices["item_id"].dtype,
         "dept_id": "category",
@@ -75,32 +76,38 @@ def load_sales(raw_dir: Path, prices: pd.DataFrame, n_days: int = 1941) -> pd.Da
     candidate = raw_dir / "sales_train_evaluation.csv"
     if not candidate.exists():
         candidate = raw_dir / "sales_train_validation.csv"
-    sales = pd.read_csv(candidate, dtype=dtypes)
+    sales = pd.read_csv(candidate, dtype=dtypes)  # type: ignore[arg-type]
 
     sales["unique_id"] = pd.Categorical(sales["item_id"].astype(str) + "_" + sales["store_id"].astype(str))
     return sales
 
 
+def _shrink_int(series: pd.Series) -> pd.Series:
+    cmin, cmax = series.min(), series.max()
+    for t in (np.int8, np.int16, np.int32, np.int64):
+        if cmin >= np.iinfo(t).min and cmax <= np.iinfo(t).max:
+            return series.astype(t)
+    return series
+
+
+def _shrink_float(series: pd.Series) -> pd.Series:
+    cmin, cmax = series.min(), series.max()
+    for t in (np.float32, np.float64):
+        if cmin >= np.finfo(t).min and cmax <= np.finfo(t).max:
+            return series.astype(t)
+    return series
+
+
 def reduce_mem_usage(df: pd.DataFrame, *, verbose: bool = True) -> pd.DataFrame:
     """Down-cast numeric columns to the smallest dtype that fits."""
-    int_kinds = (np.int8, np.int16, np.int32, np.int64)
-    float_kinds = (np.float32, np.float64)
     start = df.memory_usage(deep=True).sum() / 1024**2
 
     for col in df.columns:
         kind = df[col].dtype.kind
         if kind == "i":
-            cmin, cmax = df[col].min(), df[col].max()
-            for t in int_kinds:
-                if cmin >= np.iinfo(t).min and cmax <= np.iinfo(t).max:
-                    df[col] = df[col].astype(t)
-                    break
+            df[col] = _shrink_int(df[col])
         elif kind == "f":
-            cmin, cmax = df[col].min(), df[col].max()
-            for t in float_kinds:
-                if cmin >= np.finfo(t).min and cmax <= np.finfo(t).max:
-                    df[col] = df[col].astype(t)
-                    break
+            df[col] = _shrink_float(df[col])
     end = df.memory_usage(deep=True).sum() / 1024**2
     if verbose:
         logger.info(

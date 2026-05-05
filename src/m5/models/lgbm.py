@@ -6,6 +6,8 @@ date features, snap flag, single event flag, normalised price. No mega-blender.
 
 from __future__ import annotations
 
+from typing import Any
+
 import lightgbm as lgb
 import pandas as pd
 from mlforecast import MLForecast
@@ -19,7 +21,7 @@ DEFAULT_LAGS: tuple[int, ...] = (7, 14, 28)
 DEFAULT_ROLLS: tuple[int, ...] = (7, 28)
 
 
-def lgbm_params(seed: int = SETTINGS.seed) -> dict[str, object]:
+def lgbm_params(seed: int = SETTINGS.seed) -> dict[str, Any]:
     """Sensible LightGBM defaults for daily retail count data (Tweedie)."""
     return {
         "objective": "tweedie",
@@ -48,7 +50,9 @@ def build_lgbm_forecaster(
     seed: int = SETTINGS.seed,
 ) -> MLForecast:
     """Construct an MLForecast with LightGBM and minimal date features."""
-    lag_transforms = {lag: [RollingMean(window_size=w) for w in rolling_windows] for lag in (1,)}
+    lag_transforms: dict[int, list[Any]] = {
+        1: [RollingMean(window_size=w) for w in rolling_windows]
+    }
     model = lgb.LGBMRegressor(**lgbm_params(seed=seed), n_jobs=n_jobs)
     return MLForecast(
         models={"LGBM": model},

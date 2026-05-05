@@ -84,6 +84,21 @@ warn_redundant_casts = true
 ignore_missing_imports = true
 files = ["src/m5"]
 
+# Library stubs (lightgbm, mlforecast, statsforecast, …) tend to be stricter
+# than the libraries' real runtime. We trust our own typing in `src/m5/*` and
+# silence stub-induced friction at the boundary.
+[[tool.mypy.overrides]]
+module = [
+    "lightgbm.*",
+    "mlforecast.*",
+    "statsforecast.*",
+    "utilsforecast.*",
+    "datasetsforecast.*",
+    "hierarchicalforecast.*",
+]
+follow_imports = "silent"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short --strict-markers"
