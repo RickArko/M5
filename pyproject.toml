@@ -1,15 +1,99 @@
 [project]
-name = "Solution for the M5 Forecasting Competition"
+name = "m5"
+version = "0.1.0"
+description = "Reproducible M5 Forecasting Accuracy solution — Nixtla + LightGBM + Theta/ETS"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Rick Arko", email = "rick.arko17@gmail.com" }]
+license = { text = "MIT" }
+keywords = ["forecasting", "m5", "nixtla", "lightgbm", "time-series"]
 
-[tool.black]
-line-length = 120
+dependencies = [
+    # --- Forecasting stack (Nixtla) ---------------------------------
+    "statsforecast>=2.0.2",
+    "mlforecast>=1.0.2",
+    "utilsforecast>=0.2.12",
+    "datasetsforecast>=1.0.0",
+    "hierarchicalforecast>=1.2.0",
+    # --- ML / numerics ----------------------------------------------
+    "lightgbm>=4.5.0",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "polars>=1.21",
+    "pyarrow>=18.0",
+    "scikit-learn>=1.5",
+    # --- Plumbing ---------------------------------------------------
+    "typer>=0.15",
+    "loguru>=0.7.2",
+    "python-dotenv>=1.0",
+    "tqdm>=4.67",
+    # --- Plotting (light) -------------------------------------------
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+]
 
-[tool.isort]
-skip_gitignore = true
-atomic = true
-profile = "black"
-indent = 4
-line_length = 88
-lines_after_imports = 2
-multi_line_output = 3
-include_trailing_comma = true
+[project.scripts]
+m5 = "m5.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.5,<0.10"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pandas-stubs>=2.2",
+    "types-tqdm>=4.67",
+]
+notebook = [
+    "jupyter>=1.1",
+    "ipykernel>=6.29,<7",
+    "jupyterlab>=4.3",
+    "plotly>=5.24",
+]
+
+# ----------------------------------------------------------------------
+# Tooling
+# ----------------------------------------------------------------------
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["notebooks/*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "PD", "RUF"]
+ignore = ["E501", "PD901"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "PD"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+files = ["src/m5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src/m5"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 1
