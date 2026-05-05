@@ -18,50 +18,105 @@ reproducible rolling-origin cross-validation.
 
 ## Prerequisites
 
-- A POSIX shell with `make` — Linux, macOS, or **Windows via WSL**
-- Internet access for the first dependency sync and dataset download
+You need on your machine:
 
-Everything else (`uv`, the venv, deps, raw data) is installed by
-`make bootstrap`. There is no PowerShell / `cmd.exe` path; that's intentional.
+| Tool | Why | Check |
+|---|---|---|
+| `bash` + `make` | Driver shell + task runner | `bash --version`, `make --version` |
+| `git` | Source control | `git --version` |
+| `curl` | Used by `bootstrap.sh` to install `uv` | `curl --version` |
 
-## Quick start
+You do **not** need to pre-install Python, `uv`, or any package — `make bootstrap`
+fetches `uv`, which then provisions Python 3.12 and the locked deps into `.venv/`.
+
+**Windows users:** run everything inside **WSL2** (Ubuntu recommended). The
+PowerShell / `cmd.exe` path is intentionally unsupported — exactly one blessed shell.
+
+## Quick start (5 minutes)
 
 ```bash
-make bootstrap     # install uv, sync deps, seed .env, download M5 data
+git clone <repo-url> M5 && cd M5
+make bootstrap     # 1) install uv  2) sync deps into .venv  3) copy .env  4) register Jupyter kernel  5) download ~250 MB of raw M5 CSVs
+make check         # verify: ruff lint + mypy + pytest must all pass
 make prep          # build data/processed/long.parquet
-make cv-stats      # rolling-origin CV: Theta + AutoETS + SeasonalNaive
-make cv-lgbm       # rolling-origin CV: LightGBM global model
+make cv-stats      # rolling-origin CV: Theta + AutoETS + SeasonalNaive  → artifacts/cv_stats.parquet
+make cv-lgbm       # rolling-origin CV: LightGBM global model            → artifacts/cv_lgbm.parquet
 ```
 
-Run `make help` for everything.
+After `make bootstrap`, if your shell can't find `uv`, open a new terminal (or
+`source ~/.local/bin/env`) and re-run. `make bootstrap` is idempotent — safe to
+re-run.
 
-| Target              | What it does                                            |
-|---------------------|---------------------------------------------------------|
-| `make bootstrap`    | First-time setup (idempotent)                           |
-| `make install`      | `uv sync --all-groups` + register Jupyter kernel        |
-| `make lint` / `fmt` | Ruff lint / format                                      |
-| `make typecheck`    | mypy on `src/m5`                                        |
-| `make test` / `cov` | pytest, optionally with coverage                        |
-| `make check`        | `lint` + `typecheck` + `test` (CI entry)                |
-| `make download`     | Pull M5 raw CSVs into `data/m5`                         |
-| `make prep`         | Build the long-format training parquet                  |
-| `make cv-stats`     | CV with Theta / AutoETS / SeasonalNaive                 |
-| `make cv-lgbm`      | CV with LightGBM (`mlforecast`)                         |
-| `make forecast-*`   | Train on full data and emit a 28-day future forecast    |
-| `make notebook`     | Jupyter Lab with the `notebook` dep group               |
-| `make clean[-all]`  | Remove caches (and `.venv`/data with `clean-all`)       |
+For a faster first iteration, scope the run to a sample:
+
+```bash
+M5_N_SERIES=500 M5_LAST_N_DAYS=200 make prep cv-lgbm
+```
+
+Run `make help` for the full target list. See
+[`docs/developer/SETUP.md`](docs/developer/SETUP.md) for the long-form setup
+guide (VSCode, WSL, GPU notes).
+
+| Target | What it does |
+|---|---|
+| **Setup** | |
+| `make bootstrap` | First-time setup: install uv, deps, `.env`, raw data (idempotent) |
+| `make install` | `uv sync --all-groups` + register the **Python (m5)** Jupyter kernel |
+| **Quality** | |
+| `make lint` / `fmt` | Ruff check / Ruff format + autofix |
+| `make typecheck` | `mypy` on `src/m5` |
+| `make test` / `cov` | Full pytest suite, optionally with coverage |
+| `make test-smoke` | Smoke tier — imports, CLI help, package metadata (~1 s) |
+| `make test-unit` | Unit tier — pure-function tests on config/data/features/eval |
+| `make test-integration` | Integration tier — model fit/predict + CV on toy data |
+| `make test-fast` | Smoke + unit only (skip slow integration) |
+| `make check` | `lint` + `typecheck` + `test` (CI entry point) |
+| **Pipeline** | |
+| `make download` | Pull M5 raw CSVs into `data/m5/datasets/` |
+| `make prep` | Build the long-format training parquet → `data/processed/long.parquet` |
+| `make cv-stats` | CV with Theta / AutoETS / SeasonalNaive → `artifacts/cv_stats.parquet` |
+| `make cv-lgbm` | CV with LightGBM (`mlforecast`) → `artifacts/cv_lgbm.parquet` |
+| `make cv-hier` | CV with hierarchical Theta + BU/TD/MinT reconcilers → `artifacts/cv_hier.parquet` |
+| `make forecast-stats` / `-lgbm` / `-hier` | Train on full data, emit 28-day forecast → `forecasts/forecast_<model>.parquet` |
+| **Notebooks** | |
+| `make notebook` | Launch Jupyter Lab using the `notebook` dep group |
+| **Cleanup** | |
+| `make clean` | Remove build caches (`.pytest_cache`, `.ruff_cache`, …) |
+| `make clean-all` | Also remove `.venv/`, `data/processed/`, `forecasts/`, `artifacts/` |
+
+Override CV knobs on the CLI: `make cv-lgbm HORIZON=28 WINDOWS=3`.
+
+### Where outputs land
+
+| Path | Written by | Contents |
+|---|---|---|
+| `data/m5/datasets/` | `make download` | Raw CSVs (`calendar.csv`, `sell_prices.csv`, `sales_train_evaluation.csv`) |
+| `data/processed/long.parquet` | `make prep` | Single Nixtla long-frame: `unique_id, ds, y` + statics + features |
+| `artifacts/cv_<model>.parquet` | `make cv-*` | Rolling-origin CV predictions for scoring |
+| `forecasts/forecast_<model>.parquet` | `make forecast-*` | 28-day future forecast trained on all data |
 
 ## CLI
 
-The Make targets are thin wrappers over the `m5` Typer CLI:
+The Make targets are thin wrappers over the `m5` Typer CLI. Use it directly when
+you want flag overrides not exposed by the Makefile:
 
 ```bash
 uv run m5 --help
 uv run m5 download
 uv run m5 prep --last-n-days 400 --n-series -1
 uv run m5 cv stats --horizon 28 --n-windows 3
-uv run m5 cv lgbm --horizon 28 --n-windows 3
+uv run m5 cv lgbm  --horizon 28 --n-windows 3
+uv run m5 cv hier  --horizon 28 --n-windows 3
 uv run m5 forecast lgbm --horizon 28
+```
+
+Every flag mirrors a `.env` variable, so you can set once per shell instead of
+passing flags each time:
+
+```bash
+M5_N_SERIES=500 make prep        # subsample 500 series
+M5_N_WINDOWS=1 make cv-lgbm      # single CV window for fast iteration
+LOG_LEVEL=DEBUG make prep        # verbose logs
 ```
 
 ## Project layout
@@ -81,12 +136,14 @@ M5/
 │   ├── data.py                 # load + melt → Nixtla long frame
 │   ├── features.py             # minimal date / snap / event / price feats
 │   ├── evaluation.py           # WRMSSE
-│   ├── cv.py                   # reproducible rolling-origin CV
+│   ├── hierarchy.py            # 12-level M5 spec around hierarchicalforecast
+│   ├── cv.py                   # reproducible rolling-origin CV (stats / lgbm / hier)
 │   ├── cli.py                  # Typer CLI (`m5 …`)
 │   ├── plots.py                # matplotlib helpers
 │   └── models/
 │       ├── stats.py            # Theta + AutoETS + SeasonalNaive
-│       └── lgbm.py             # LightGBM via mlforecast
+│       ├── lgbm.py             # LightGBM via mlforecast
+│       └── hierarchical.py     # Theta base + BU/TD/MinT reconcilers
 ├── notebooks/                  # 00_run_pipeline + the original EDA suite
 ├── tests/                      # pytest unit + smoke tests
 ├── plots/                      # static images from the original analysis
@@ -95,21 +152,31 @@ M5/
 
 ## Configuration
 
-```bash
-cp .env.example .env
-```
-
-Variables (all optional, sensible defaults):
+`make bootstrap` already copies `.env.example` → `.env`. Edit `.env` to override
+defaults:
 
 ```
 DATA_DIR=data
 M5_SEED=42
-M5_HORIZON=28          # M5 evaluation window
+M5_HORIZON=28          # M5 evaluation window (28 days)
 M5_N_WINDOWS=3         # rolling-origin CV windows
-M5_LAST_N_DAYS=400     # trailing window of training data
-M5_N_SERIES=-1         # subsample (-1 = all 30,490)
-LOG_LEVEL=INFO
+M5_LAST_N_DAYS=400     # trailing window of training data (full series ≈ 1941 days)
+M5_N_SERIES=-1         # subsample (-1 = all 30,490 series)
+LOG_LEVEL=INFO         # TRACE | DEBUG | INFO | WARNING | ERROR
 ```
+
+## Troubleshooting (the short list)
+
+| Symptom | Fix |
+|---|---|
+| `command not found: uv` after bootstrap | Open a new terminal or `source ~/.local/bin/env` |
+| Notebook can't see *Python (m5)* kernel | `make install` re-registers it |
+| `ModuleNotFoundError: No module named 'm5'` in a notebook | Wrong kernel — pick **Python (m5)** in the kernel picker |
+| `data/m5/datasets/` empty | `make download` (~250 MB, one-time) |
+| RAM blows up during `make prep` | Use `M5_LAST_N_DAYS=200 M5_N_SERIES=5000 make prep` |
+| Two CV runs disagree | That's a determinism bug — file an issue with the diff |
+
+Full list: [`docs/developer/TROUBLESHOOTING.md`](docs/developer/TROUBLESHOOTING.md).
 
 ## Documentation
 
