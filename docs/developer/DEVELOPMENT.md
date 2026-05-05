@@ -68,18 +68,46 @@ uv add --group notebook <package>        # only for `make notebook`
 
 ## Running tests
 
-```bash
-make test                                # all tests
-uv run pytest tests/test_evaluation.py   # one file
-uv run pytest -k wrmsse                  # by name
-uv run pytest -x --pdb                   # stop on first failure, drop into debugger
-make cov                                 # coverage in terminal + htmlcov/
+The suite is split into three tiers — pick the one that matches what you're
+doing.
+
+```text
+tests/
+├── conftest.py            # shared fixtures, auto-marks tests by directory
+├── smoke/                 # fast: imports, CLI --help, package metadata (~1s)
+├── unit/                  # pure functions: config, data, features, evaluation
+└── integration/           # end-to-end on toy data: models, CV, pipeline
 ```
 
-The smoke tests in `tests/test_models_smoke.py` skip themselves when the
-heavyweight deps (`statsforecast`, `mlforecast`, `lightgbm`) are missing — they
-run fully under `uv sync` but you can also run a slim test environment without
-them.
+```bash
+make test               # everything (smoke + unit + integration)
+make test-smoke         # ~1s sanity check — run on every save
+make test-unit          # ~1s pure-function tests
+make test-integration   # ~10s — fits real models on toy data
+make test-fast          # smoke + unit, no slow integration
+
+uv run pytest tests/unit/test_evaluation.py   # one file
+uv run pytest -k wrmsse                       # by name
+uv run pytest -m "not slow"                   # skip > ~5s tests
+uv run pytest -x --pdb                        # stop on first failure, drop into pdb
+make cov                                      # coverage (terminal + htmlcov/)
+```
+
+Markers (`smoke`, `unit`, `integration`, `slow`) are declared in
+`[tool.pytest.ini_options]` and `--strict-markers` is on, so a typo will fail
+collection rather than silently skip work. You don't add `pytestmark` to test
+files — `conftest.py` auto-marks tests based on which subdirectory they live in.
+
+### When to put a test in which tier
+
+| Tier         | Criteria                                                  | Examples                            |
+|--------------|-----------------------------------------------------------|-------------------------------------|
+| `smoke`      | < 100ms, no I/O, no model fitting                         | imports, CLI `--help`, version      |
+| `unit`       | Pure function on a fixture; no third-party model calls    | WRMSSE math, feature transforms     |
+| `integration`| Touches a real model / CV / pipeline; toy data is OK      | LGBM fit, statsforecast CV          |
+
+Add `@pytest.mark.slow` to any integration test that takes more than ~5s so
+`make test-fast` can skip it.
 
 ## Notebooks
 

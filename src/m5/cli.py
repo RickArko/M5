@@ -57,13 +57,13 @@ def prep(
 
 @app.command()
 def cv(
-    model: str = typer.Argument("stats", help="One of: stats, lgbm."),
+    model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),
     horizon: int = typer.Option(SETTINGS.horizon),
     n_windows: int = typer.Option(SETTINGS.n_windows),
     long_path: Path = typer.Option(None, help="Path to processed long parquet."),
 ) -> None:
     """Run reproducible rolling-origin cross-validation."""
-    from m5.cv import lgbm_cv, stats_cv
+    from m5.cv import hier_cv, lgbm_cv, stats_cv
     from m5.evaluation import compute_components, wrmsse_for_models
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
@@ -73,8 +73,10 @@ def cv(
         cv_df = stats_cv(df, h=horizon, n_windows=n_windows)
     elif model == "lgbm":
         cv_df = lgbm_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "hier":
+        cv_df = hier_cv(df, h=horizon, n_windows=n_windows)
     else:
-        raise typer.BadParameter(f"Unknown model: {model!r}. Use 'stats' or 'lgbm'.")
+        raise typer.BadParameter(f"Unknown model: {model!r}. Use 'stats', 'lgbm', or 'hier'.")
     components = compute_components(df[df["ds"] < cv_df["ds"].min()])
     truth = cv_df.rename(columns={"y": "y"})[["unique_id", "ds", "y"]]
     scores = wrmsse_for_models(truth, cv_df, components)
@@ -87,11 +89,12 @@ def cv(
 
 @app.command()
 def forecast(
-    model: str = typer.Argument("stats"),
+    model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),
     horizon: int = typer.Option(SETTINGS.horizon),
     long_path: Path = typer.Option(None),
 ) -> None:
     """Train on all available data and emit a future forecast."""
+    from m5.models.hierarchical import fit_predict_hier
     from m5.models.lgbm import fit_predict_lgbm
     from m5.models.stats import fit_predict_stats
 
@@ -102,6 +105,8 @@ def forecast(
         out_df = fit_predict_stats(df, horizon=horizon)
     elif model == "lgbm":
         out_df = fit_predict_lgbm(df, horizon=horizon)
+    elif model == "hier":
+        out_df = fit_predict_hier(df, horizon=horizon)
     else:
         raise typer.BadParameter(f"Unknown model: {model!r}.")
 

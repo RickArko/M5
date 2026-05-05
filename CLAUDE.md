@@ -40,9 +40,11 @@ src/m5/
   data.py        → load_calendar/prices/sales + build_long_frame. Wide → Nixtla long ('unique_id','ds','y' + statics + price + snap + events).
   features.py    → date / snap / event-flag / price-norm features. Lags & rolls live in models/lgbm.py, not here.
   evaluation.py  → WRMSSE: compute_components(weights, scales) + wrmsse / wrmsse_for_models.
-  cv.py          → stats_cv / lgbm_cv. Always seeds before .cross_validation().
+  hierarchy.py   → M5_LEVELS_SPEC (12 levels) + build_hierarchy / extract_bottom around hierarchicalforecast.utils.aggregate.
+  cv.py          → stats_cv / lgbm_cv / hier_cv. Always seeds before .cross_validation().
   models/stats.py → Theta + AutoETS('ZNA') + SeasonalNaive @ season_length=7.
   models/lgbm.py  → MLForecast + LightGBM (Tweedie, deterministic). lags=(7,14,28), rolls=(7,28), Differences([1]).
+  models/hierarchical.py → Theta base at every level + 4 reconcilers (BU / TD-fp / MinTrace OLS / MinTrace shrink).
   cli.py          → typer app: download | prep | cv | forecast.
   plots.py        → tiny matplotlib axis-formatter helpers.
 ```
@@ -61,13 +63,14 @@ src/m5/
 
 ## Caveats
 
-- `m5.evaluation.wrmsse` scores the **bottom level only** (item × store). Hierarchical aggregation across the 12 official M5 levels is not in the package — `notebooks/06_score.ipynb` does it inline. If you need it programmatically, lift the helper from there.
+- `m5.evaluation.wrmsse` scores the **bottom level only** (item × store). The 12 official M5 levels are now wired through `m5.hierarchy` (used by `models/hierarchical.py` + `cv.hier_cv`); `hier_cv` returns bottom-level rows by default so `wrmsse_for_models` consumes it directly. To score per-level instead, call `hier_cv(..., bottom_only=False)` and group by `tags`.
+- The hierarchical pipeline uses Theta as the base learner at every level. LightGBM-as-base is deferred — price/snap don't aggregate cleanly to upper levels and need their own treatment.
 - `tests/conftest.py::toy_long` is the M5-shaped synthetic fixture every test reuses; new tests should depend on it instead of building their own.
 - Notebook outputs are excluded from ruff (`extend-exclude = ["notebooks/*.ipynb"]`); don't rely on lint to catch issues there.
 - `mypy` only walks `src/m5` (notebooks and tests are unchecked).
 
 ## When extending
 
-- New model → add `src/m5/models/<x>.py` with `build_<x>_forecaster` + `fit_predict_<x>` mirroring `stats.py` / `lgbm.py`, register it in `models/__init__.py`, add a `<x>_cv` runner in `cv.py`, and wire into `cli.cv` / `cli.forecast`'s `runner` dict.
+- New model → add `src/m5/models/<x>.py` with `build_<x>_forecaster` + `fit_predict_<x>` mirroring `stats.py` / `lgbm.py` / `hierarchical.py`, register it in `models/__init__.py`, add a `<x>_cv` runner in `cv.py`, and wire into `cli.cv` / `cli.forecast`'s `if/elif` chain.
 - New feature → add to `features.py`, include in `build_feature_frame`, and update the `keep_cols` list in both `models/lgbm.py::fit_predict_lgbm` and `cv.py::lgbm_cv` so the feature actually reaches the model.
 - Reference doc for methodology and metric: [`WriteUp.md`](WriteUp.md).

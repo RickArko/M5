@@ -12,7 +12,6 @@ import lightgbm as lgb
 import pandas as pd
 from mlforecast import MLForecast
 from mlforecast.lag_transforms import RollingMean
-from mlforecast.target_transforms import Differences
 
 from m5.config import SETTINGS
 from m5.features import build_feature_frame
@@ -69,7 +68,6 @@ def build_lgbm_forecaster(
         lags=list(lags),
         lag_transforms=lag_transforms,
         date_features=["dayofweek", "day", "week", "month", "year"],
-        target_transforms=[Differences([1])],
         num_threads=n_jobs,
     )
 
@@ -79,14 +77,23 @@ def fit_predict_lgbm(
     *,
     horizon: int = SETTINGS.horizon,
     static_cols: tuple[str, ...] = ("item_id", "dept_id", "cat_id", "store_id", "state_id"),
+    X_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """End-to-end fit+predict; ``df`` must have ``unique_id, ds, y`` + features."""
+    """End-to-end fit+predict.
+
+    If ``X_df`` (future calendar + prices) is provided, dynamic exogenous
+    features are used; otherwise the model is trained on lags + date features
+    + static categoricals only, so ``.predict(h)`` works without a future frame.
+    """
     df = build_feature_frame(df.copy())
     statics_present = [c for c in static_cols if c in df.columns]
     df = encode_static_categoricals(df, statics_present)
 
-    keep_cols = ["unique_id", "ds", "y", *statics_present]
-    keep_cols += [c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns]
+    dynamic_cols: list[str] = []
+    if X_df is not None:
+        dynamic_cols = [c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns]
+
+    keep_cols = ["unique_id", "ds", "y", *statics_present, *dynamic_cols]
     fcst = build_lgbm_forecaster()
     fcst.fit(df[keep_cols], static_features=statics_present)
-    return fcst.predict(h=horizon)
+    return fcst.predict(h=horizon, X_df=X_df) if X_df is not None else fcst.predict(h=horizon)

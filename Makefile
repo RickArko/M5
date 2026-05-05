@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap install lint fmt typecheck test test-smoke test-unit \
         test-integration test-fast cov check \
-        download prep cv-stats cv-lgbm forecast-stats forecast-lgbm \
+        download prep cv-stats cv-lgbm cv-hier forecast-stats forecast-lgbm forecast-hier \
         notebook clean clean-all
 
 UV       ?= uv
@@ -75,11 +75,17 @@ cv-stats: ## Cross-validate Theta + AutoETS + SeasonalNaive
 cv-lgbm: ## Cross-validate the LightGBM global model
 	$(UV) run m5 cv lgbm --horizon $(HORIZON) --n-windows $(WINDOWS)
 
+cv-hier: ## Cross-validate the hierarchical pipeline (Theta + BU/TD/MinT reconcilers)
+	$(UV) run m5 cv hier --horizon $(HORIZON) --n-windows $(WINDOWS)
+
 forecast-stats: ## Train+predict statistical baselines
 	$(UV) run m5 forecast stats --horizon $(HORIZON)
 
 forecast-lgbm: ## Train+predict LightGBM global model
 	$(UV) run m5 forecast lgbm --horizon $(HORIZON)
+
+forecast-hier: ## Train+predict hierarchical (Theta base, 4 reconcilers)
+	$(UV) run m5 forecast hier --horizon $(HORIZON)
 
 # ---- Notebooks -----------------------------------------------------
 
