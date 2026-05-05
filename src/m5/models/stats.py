@@ -2,6 +2,9 @@
 
 These are univariate, fast on CPU, and very strong on M5 — Theta in particular
 was a top-tier baseline in the original competition.
+
+The canonical bundle lives in ``configs/m5/stats.yaml`` and is loaded through
+:mod:`m5.recipes`. The functions below are thin back-compat wrappers.
 """
 
 from __future__ import annotations
@@ -10,13 +13,21 @@ import time
 
 import pandas as pd
 from statsforecast import StatsForecast
-from statsforecast.models import AutoETS, SeasonalNaive, Theta
 
 from m5.config import SETTINGS
 from m5.logging import logger
+from m5.recipes import (
+    STATS_RECIPE_PATH,
+    Recipe,
+    build_stats_from_recipe,
+)
 
 DEFAULT_FREQ = "D"
 DEFAULT_SEASON = 7  # weekly seasonality on daily retail data
+
+
+def _load_stats_recipe() -> Recipe:
+    return Recipe.from_yaml(STATS_RECIPE_PATH)
 
 
 def build_stats_forecaster(
@@ -25,13 +36,19 @@ def build_stats_forecaster(
     freq: str = DEFAULT_FREQ,
     n_jobs: int = -1,
 ) -> StatsForecast:
-    """Theta + AutoETS + SeasonalNaive (the seasonal naive is the canonical M5 baseline)."""
-    models = [
-        Theta(season_length=season_length, alias="Theta"),
-        AutoETS(season_length=season_length, model="ZNA", alias="AutoETS"),
-        SeasonalNaive(season_length=season_length, alias="SeasonalNaive"),
+    """Theta + AutoETS + SeasonalNaive bundle from ``configs/m5/stats.yaml``."""
+    recipe = _load_stats_recipe()
+    assert recipe.model.kind == "stats"
+
+    # Apply per-call overrides by patching every model spec's season_length.
+    new_specs = [
+        spec.model_copy(update={"season_length": season_length})
+        for spec in recipe.model.models
     ]
-    return StatsForecast(models=models, freq=freq, n_jobs=n_jobs)
+    new_model = recipe.model.model_copy(update={"models": new_specs})
+    new_task = recipe.task.model_copy(update={"freq": freq})
+    recipe = recipe.model_copy(update={"task": new_task, "model": new_model})
+    return build_stats_from_recipe(recipe, n_jobs=n_jobs)
 
 
 def fit_predict_stats(

@@ -27,6 +27,8 @@ dependencies = [
     "loguru>=0.7.2",
     "python-dotenv>=1.0",
     "tqdm>=4.67",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
     # --- Plotting (light) -------------------------------------------
     "matplotlib>=3.9",
     "seaborn>=0.13",
@@ -53,6 +55,7 @@ dev = [
     "mypy>=1.13",
     "pandas-stubs>=2.2",
     "types-tqdm>=4.67",
+    "types-pyyaml>=6.0",
 ]
 notebook = [
     "jupyter>=1.1",

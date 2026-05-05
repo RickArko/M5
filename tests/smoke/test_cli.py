@@ -19,7 +19,7 @@ def test_root_help(runner: CliRunner) -> None:
     assert "M5 forecasting toolkit" in result.stdout
 
 
-@pytest.mark.parametrize("subcommand", ["download", "prep", "cv", "forecast"])
+@pytest.mark.parametrize("subcommand", ["download", "prep", "cv", "cv-recipe", "forecast"])
 def test_subcommand_help(runner: CliRunner, subcommand: str) -> None:
     result = runner.invoke(app, [subcommand, "--help"])
     assert result.exit_code == 0

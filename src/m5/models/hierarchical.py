@@ -15,26 +15,29 @@ from __future__ import annotations
 
 import pandas as pd
 from hierarchicalforecast.core import HierarchicalReconciliation
-from hierarchicalforecast.methods import BottomUp, MinTrace, TopDown
 from statsforecast import StatsForecast
-from statsforecast.models import Theta
 
 from m5.config import SETTINGS
 from m5.hierarchy import build_hierarchy, extract_bottom
+from m5.recipes import (
+    HIER_RECIPE_PATH,
+    Recipe,
+    build_hier_base_from_recipe,
+    build_hier_reconcilers_from_recipe,
+)
 
 DEFAULT_FREQ = "D"
 DEFAULT_SEASON = 7
 BASE_MODEL_NAME = "Theta"
 
 
+def _load_hier_recipe() -> Recipe:
+    return Recipe.from_yaml(HIER_RECIPE_PATH)
+
+
 def build_hier_reconcilers() -> list:
-    """Default reconciler bundle: BU + TD + MinTrace(OLS) + MinTrace(shrink)."""
-    return [
-        BottomUp(),
-        TopDown(method="forecast_proportions"),
-        MinTrace(method="ols"),
-        MinTrace(method="mint_shrink"),
-    ]
+    """Default reconciler bundle from ``configs/m5/hier.yaml``: BU + TD + MinT(OLS) + MinT(shrink)."""
+    return build_hier_reconcilers_from_recipe(_load_hier_recipe())
 
 
 def build_hier_base_forecaster(
@@ -43,12 +46,14 @@ def build_hier_base_forecaster(
     freq: str = DEFAULT_FREQ,
     n_jobs: int = -1,
 ) -> StatsForecast:
-    """Theta base learner used at every aggregation level."""
-    return StatsForecast(
-        models=[Theta(season_length=season_length, alias=BASE_MODEL_NAME)],
-        freq=freq,
-        n_jobs=n_jobs,
-    )
+    """Theta base learner used at every aggregation level. Loaded from configs/m5/hier.yaml."""
+    recipe = _load_hier_recipe()
+    assert recipe.model.kind == "hier"
+    new_base = recipe.model.base_model.model_copy(update={"season_length": season_length})
+    new_model = recipe.model.model_copy(update={"base_model": new_base})
+    new_task = recipe.task.model_copy(update={"freq": freq})
+    recipe = recipe.model_copy(update={"task": new_task, "model": new_model})
+    return build_hier_base_from_recipe(recipe, n_jobs=n_jobs)
 
 
 def fit_predict_hier(

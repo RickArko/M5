@@ -55,6 +55,20 @@ For a faster first iteration, scope the run to a sample:
 M5_N_SERIES=500 M5_LAST_N_DAYS=200 make prep cv-lgbm
 ```
 
+### Activating the venv
+
+`make install` / `make bootstrap` always create the project venv at
+**`./.venv`** (pinned via `UV_PROJECT_ENVIRONMENT=.venv` in `.env.example` and
+exported by the `Makefile`). Three ways to use it:
+
+```bash
+source .venv/bin/activate        # explicit shell activation — you'll see (m5) in prompt
+code .                           # VSCode auto-activates new terminals (.vscode/settings.json)
+uv run m5 --help                 # works without activating at all
+```
+
+`make activate` re-prints the activation command if you forget it.
+
 Run `make help` for the full target list. See
 [`docs/developer/SETUP.md`](docs/developer/SETUP.md) for the long-form setup
 guide (VSCode, WSL, GPU notes).

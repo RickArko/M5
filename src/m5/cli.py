@@ -87,6 +87,39 @@ def cv(
     logger.info(f"Wrote {out}")
 
 
+@app.command("cv-recipe")
+def cv_recipe(
+    recipe_path: Path = typer.Argument(..., help="Path to a YAML recipe (e.g. configs/m5/lgbm.yaml)."),
+    horizon: int | None = typer.Option(None, help="Override recipe.task.horizon."),
+    n_windows: int | None = typer.Option(None, help="Override recipe.cv.n_windows."),
+    long_path: Path = typer.Option(None, help="Path to processed long parquet."),
+) -> None:
+    """Recipe-driven CV — loads YAML and dispatches on ``model.kind``.
+
+    Adding a new task: ``configs/<task>/<model>.yaml`` + a per-task data prep
+    that produces a long-frame parquet with the columns named in ``task.*``.
+    """
+    from m5.cv import cv_from_recipe
+    from m5.evaluation import compute_components, wrmsse_for_models
+    from m5.recipes import Recipe
+
+    recipe = Recipe.from_yaml(recipe_path)
+    long_path = long_path or SETTINGS.processed_dir / "long.parquet"
+    logger.info(f"cv-recipe[{recipe_path.name}]: loading {long_path}")
+    df = pd.read_parquet(long_path)
+
+    cv_df = cv_from_recipe(recipe, df, h=horizon, n_windows=n_windows)
+    components = compute_components(df[df["ds"] < cv_df["ds"].min()])
+    truth = cv_df[["unique_id", "ds", "y"]]
+    scores = wrmsse_for_models(truth, cv_df, components)
+    logger.info(f"WRMSSE by model:\n{scores.to_string()}")
+
+    out = SETTINGS.artifacts_dir / f"cv_{recipe_path.stem}.parquet"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cv_df.to_parquet(out, index=False)
+    logger.info(f"Wrote {out}")
+
+
 @app.command()
 def forecast(
     model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),

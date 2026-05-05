@@ -2,6 +2,10 @@
 
 We keep the feature menu deliberately small: lags 7/14/28 + 7-day rolling mean,
 date features, snap flag, single event flag, normalised price. No mega-blender.
+
+The canonical configuration lives in ``configs/m5/lgbm.yaml`` and is loaded
+through :mod:`m5.recipes`. The functions below are thin back-compat wrappers
+so existing callers (CLI, notebooks, tests) keep working unchanged.
 """
 
 from __future__ import annotations
@@ -9,17 +13,38 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import lightgbm as lgb
 import pandas as pd
 from mlforecast import MLForecast
-from mlforecast.lag_transforms import RollingMean
 
 from m5.config import SETTINGS
 from m5.features import build_feature_frame
 from m5.logging import logger
+from m5.recipes import (
+    LGBM_RECIPE_PATH,
+    LagSpec,
+    Recipe,
+    build_lgbm_from_recipe,
+)
 
-DEFAULT_LAGS: tuple[int, ...] = (7, 14, 28)
-DEFAULT_ROLLS: tuple[int, ...] = (7, 28)
+
+def _load_lgbm_recipe() -> Recipe:
+    return Recipe.from_yaml(LGBM_RECIPE_PATH)
+
+
+def _lgbm_recipe_default_lags() -> tuple[int, ...]:
+    r = _load_lgbm_recipe()
+    assert r.model.kind == "lgbm"
+    return tuple(r.model.lags.lags)
+
+def _lgbm_recipe_default_rolls() -> tuple[int, ...]:
+    r = _load_lgbm_recipe()
+    assert r.model.kind == "lgbm"
+    return tuple(r.model.lags.rolling_means_lagged.get(1, []))
+
+# Module-level constants kept for back-compat; sourced from the YAML at import time
+# so a recipe edit is a single-place change.
+DEFAULT_LAGS: tuple[int, ...] = _lgbm_recipe_default_lags()
+DEFAULT_ROLLS: tuple[int, ...] = _lgbm_recipe_default_rolls()
 
 
 def encode_static_categoricals(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -32,24 +57,10 @@ def encode_static_categoricals(df: pd.DataFrame, cols: list[str]) -> pd.DataFram
 
 
 def lgbm_params(seed: int = SETTINGS.seed) -> dict[str, Any]:
-    """Sensible LightGBM defaults for daily retail count data (Tweedie)."""
-    return {
-        "objective": "tweedie",
-        "tweedie_variance_power": 1.1,
-        "metric": "rmse",
-        "learning_rate": 0.05,
-        "num_leaves": 128,
-        "min_data_in_leaf": 100,
-        "feature_fraction": 0.8,
-        "bagging_fraction": 0.8,
-        "bagging_freq": 1,
-        "n_estimators": 1500,
-        "verbosity": -1,
-        "seed": seed,
-        "deterministic": True,
-        "force_row_wise": True,
-    }
-
+    """Canonical LightGBM hyperparams (Tweedie). Loaded from configs/m5/lgbm.yaml."""
+    recipe = _load_lgbm_recipe()
+    assert recipe.model.kind == "lgbm"
+    return {**recipe.model.params, "seed": seed}
 
 def build_lgbm_forecaster(
     *,
@@ -59,19 +70,21 @@ def build_lgbm_forecaster(
     n_jobs: int = -1,
     seed: int = SETTINGS.seed,
 ) -> MLForecast:
-    """Construct an MLForecast with LightGBM and minimal date features."""
-    lag_transforms: dict[int, list[Any]] = {
-        1: [RollingMean(window_size=w) for w in rolling_windows]
-    }
-    model = lgb.LGBMRegressor(**lgbm_params(seed=seed), n_jobs=n_jobs)
-    return MLForecast(
-        models={"LGBM": model},
-        freq=freq,
+    """Construct an MLForecast with LightGBM and minimal date features.
+
+    Defaults come from ``configs/m5/lgbm.yaml``. Pass kwargs to override per-call.
+    """
+    recipe = _load_lgbm_recipe()
+    assert recipe.model.kind == "lgbm"
+    new_lag_spec = LagSpec(
         lags=list(lags),
-        lag_transforms=lag_transforms,
-        date_features=["dayofweek", "day", "week", "month", "year"],
-        num_threads=n_jobs,
+        rolling_means_lagged={1: list(rolling_windows)},
+        differences=list(recipe.model.lags.differences),
     )
+    new_model = recipe.model.model_copy(update={"lags": new_lag_spec})
+    new_task = recipe.task.model_copy(update={"freq": freq})
+    recipe = recipe.model_copy(update={"task": new_task, "model": new_model})
+    return build_lgbm_from_recipe(recipe, seed=seed, n_jobs=n_jobs)
 
 
 def fit_predict_lgbm(

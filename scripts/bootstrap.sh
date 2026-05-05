@@ -15,7 +15,9 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 # 2) Sync deps -------------------------------------------------------
-echo "==> Syncing dependencies (uv sync --all-groups)"
+# Pin the venv path so `.vscode/settings.json` and `make activate` agree.
+export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-.venv}"
+echo "==> Syncing dependencies (uv sync --all-groups → ./${UV_PROJECT_ENVIRONMENT})"
 uv sync --all-groups
 
 # 3) Seed .env -------------------------------------------------------
@@ -36,9 +38,14 @@ else
     echo "==> M5 raw data already present (skip download)"
 fi
 
-cat <<'NEXT'
+cat <<NEXT
 
-==> Bootstrap complete.
+==> Bootstrap complete. venv at ./${UV_PROJECT_ENVIRONMENT}
+
+Activate the environment (any one):
+    source ${UV_PROJECT_ENVIRONMENT}/bin/activate     # explicit shell activation
+    code .                                             # VSCode auto-activates via .vscode/settings.json
+    uv run <cmd>                                       # works without activating
 
 Next steps:
     make prep            # build the long-format training parquet
@@ -46,5 +53,5 @@ Next steps:
     make cv-lgbm         # rolling-origin CV with LightGBM
     make notebook        # launch Jupyter Lab
 
-Run `make help` for everything else.
+Run \`make help\` for everything else.
 NEXT

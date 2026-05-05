@@ -1,0 +1,32 @@
+# M5 — Statistical baselines recipe.
+#
+# Mirrors src/m5/models/stats.py:build_stats_forecaster exactly:
+#   Theta + AutoETS('ZNA') + SeasonalNaive @ season_length=7.
+
+task:
+  name: m5
+  id_col: unique_id
+  time_col: ds
+  target_col: y
+  freq: D
+  horizon: 28
+  static_cols: [item_id, dept_id, cat_id, store_id, state_id]
+  dynamic_cols: []
+  drop_leading_zeros: true
+
+model:
+  kind: stats
+  models:
+    - name: Theta
+      season_length: 7
+      alias: Theta
+    - name: AutoETS
+      season_length: 7
+      model: ZNA
+      alias: AutoETS
+    - name: SeasonalNaive
+      season_length: 7
+      alias: SeasonalNaive
+
+cv:
+  n_windows: 3
