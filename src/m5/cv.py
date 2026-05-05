@@ -48,7 +48,9 @@ def lgbm_cv(
     fcst = build_lgbm_forecaster()
     static_features = [c for c in static_cols if c in df.columns]
     logger.info(f"lgbm_cv: h={h} n_windows={n_windows} step={step_size or h}")
-    keep = ["unique_id", "ds", "y"] + [c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns]
+    keep = ["unique_id", "ds", "y"] + [
+        c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns
+    ]
     return fcst.cross_validation(
         df=df[keep],
         h=h,

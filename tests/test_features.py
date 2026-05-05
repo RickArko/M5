@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from m5.features import add_date_features, add_event_flag, add_price_features, add_snap_flag, build_feature_frame
+from m5.features import (
+    add_date_features,
+    add_event_flag,
+    add_price_features,
+    add_snap_flag,
+    build_feature_frame,
+)
 
 
 def test_date_features_attach_expected_cols(toy_long: pd.DataFrame) -> None:

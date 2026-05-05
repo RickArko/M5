@@ -21,4 +21,4 @@ def configure(level: str | None = None) -> None:
 configure()
 logger = _logger
 
-__all__ = ["logger", "configure"]
+__all__ = ["configure", "logger"]

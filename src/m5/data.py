@@ -77,9 +77,7 @@ def load_sales(raw_dir: Path, prices: pd.DataFrame, n_days: int = 1941) -> pd.Da
         candidate = raw_dir / "sales_train_validation.csv"
     sales = pd.read_csv(candidate, dtype=dtypes)
 
-    sales["unique_id"] = pd.Categorical(
-        sales["item_id"].astype(str) + "_" + sales["store_id"].astype(str)
-    )
+    sales["unique_id"] = pd.Categorical(sales["item_id"].astype(str) + "_" + sales["store_id"].astype(str))
     return sales
 
 
@@ -105,7 +103,9 @@ def reduce_mem_usage(df: pd.DataFrame, *, verbose: bool = True) -> pd.DataFrame:
                     break
     end = df.memory_usage(deep=True).sum() / 1024**2
     if verbose:
-        logger.info(f"reduce_mem_usage: {start:,.1f} MB → {end:,.1f} MB ({100 * (start - end) / start:.1f}% drop)")
+        logger.info(
+            f"reduce_mem_usage: {start:,.1f} MB → {end:,.1f} MB ({100 * (start - end) / start:.1f}% drop)"
+        )
     return df
 
 

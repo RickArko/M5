@@ -57,7 +57,7 @@ def build_lgbm_forecaster(
         lag_transforms=lag_transforms,
         date_features=["dayofweek", "day", "week", "month", "year"],
         target_transforms=[Differences([1])],
-        num_threads=n_jobs if n_jobs > 0 else 0,
+        num_threads=n_jobs,
     )
 
 

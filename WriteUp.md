@@ -1,11 +1,40 @@
 # Solution WriteUp
-I will aim to answer this problem with the following approach:
 
-1. **EDA** - Conduct exploratory analysis to summarize key releationships and help inform feature generation
-1. **Naive Baseline** - Generate a naive baseline, compute errors to estalish what a minimum viable solution may look like.
-1. **Stats Forecast** - Generate a few statistical forecast benchmarks (these will be univariate) how much better can we do than the naive baseline?
-1. **MLForecast** - Generate a full scalable mlforecast that utilizes all the features, quantify how much this model improves on the naive and statistical baselines.
-1. **Evaluation** - Score all of the forecasts against each other quantify the gain, summarize the most meaningful features and improvements made.
+The aim is to get close to world-class on the M5 task with **as few features as
+possible**. The competition was won by deep ensembles with hundreds of features —
+this solution intentionally constrains itself to a small, defensible feature
+menu and three model families to see how far disciplined design takes us.
+
+## Approach
+
+1. **EDA** — Summarise hierarchical patterns and identify the calendar effects
+   that actually move sales (weekly cycle, holidays, SNAP days, Christmas
+   closure). See `notebooks/01_eda.ipynb`.
+2. **Naive Baselines** — `SeasonalNaive(7)` is the canonical M5 baseline; we
+   include it in every CV run so improvements are interpretable.
+3. **Statistical Forecasts** — `Theta` and `AutoETS` (via `statsforecast`).
+   Univariate, fast, and historically very strong on M5.
+4. **LightGBM Global Model** — single Tweedie regressor over all series via
+   `mlforecast`, with lags 7/14/28, rolling means over 7/28 days, and the
+   minimal feature set described below.
+5. **Reproducible CV** — rolling-origin CV with `h=28, n_windows=3`, seeded
+   globally before every run; results written to `artifacts/cv_<model>.parquet`.
+6. **Evaluation** — bottom-level **WRMSSE** (item × store) implemented in
+   `src/m5/evaluation.py`.
+
+## Minimal feature menu
+
+| Family    | Features                                                    |
+|-----------|-------------------------------------------------------------|
+| Date      | `dayofweek`, `day`, `week`, `month`, `year`, `is_weekend`   |
+| Calendar  | `snap` (collapsed from `snap_CA/TX/WI`), `is_event` (binary)|
+| Price     | `sell_price`, `price_norm` (per-series), `price_change_pct` |
+| Lags      | 7, 14, 28                                                   |
+| Rolls     | RollingMean over 7 and 28 days, lagged by 1                 |
+| Static    | `item_id`, `dept_id`, `cat_id`, `store_id`, `state_id`      |
+
+That's the entire feature surface. No fourier terms, no holiday distances, no
+multi-hot event encoding, no per-state event splits.
 
 # EDA
 

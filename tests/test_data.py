@@ -16,10 +16,12 @@ def test_split_train_horizon_uses_last_h_days(toy_long: pd.DataFrame) -> None:
 
 
 def test_reduce_mem_usage_lowers_memory() -> None:
-    df = pd.DataFrame({
-        "a": np.arange(100, dtype=np.int64),
-        "b": np.linspace(0, 1, 100, dtype=np.float64),
-    })
+    df = pd.DataFrame(
+        {
+            "a": np.arange(100, dtype=np.int64),
+            "b": np.linspace(0, 1, 100, dtype=np.float64),
+        }
+    )
     before = df.memory_usage(deep=True).sum()
     out = reduce_mem_usage(df, verbose=False)
     after = out.memory_usage(deep=True).sum()

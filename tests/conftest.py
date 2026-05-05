@@ -23,15 +23,17 @@ def toy_long(rng: np.random.Generator) -> pd.DataFrame:
         noise = rng.normal(0, 1, 200)
         y = np.clip(seasonal + trend + noise, 0, None).astype(np.float32)
         for d, v in zip(dates, y, strict=True):
-            rows.append({
-                "unique_id": sid,
-                "ds": d,
-                "y": v,
-                "item_id": "_".join(sid.split("_")[:3]),
-                "dept_id": "_".join(sid.split("_")[:2]),
-                "cat_id": sid.split("_")[0],
-                "store_id": "_".join(sid.split("_")[3:5]),
-                "state_id": sid.split("_")[3],
-                "sell_price": 1.0 + 0.1 * (sid.endswith("CA_1")),
-            })
+            rows.append(
+                {
+                    "unique_id": sid,
+                    "ds": d,
+                    "y": v,
+                    "item_id": "_".join(sid.split("_")[:3]),
+                    "dept_id": "_".join(sid.split("_")[:2]),
+                    "cat_id": sid.split("_")[0],
+                    "store_id": "_".join(sid.split("_")[3:5]),
+                    "state_id": sid.split("_")[3],
+                    "sell_price": 1.0 + 0.1 * (sid.endswith("CA_1")),
+                }
+            )
     return pd.DataFrame(rows)
