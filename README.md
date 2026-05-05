@@ -111,6 +111,13 @@ M5_N_SERIES=-1         # subsample (-1 = all 30,490)
 LOG_LEVEL=INFO
 ```
 
+## Documentation
+
+- [`docs/developer/SETUP.md`](docs/developer/SETUP.md) — first-time install (WSL, uv, VSCode).
+- [`docs/developer/DEVELOPMENT.md`](docs/developer/DEVELOPMENT.md) — daily workflow, testing, debugging.
+- [`docs/developer/ARCHITECTURE.md`](docs/developer/ARCHITECTURE.md) — why this stack, package layout, data flow.
+- [`docs/developer/TROUBLESHOOTING.md`](docs/developer/TROUBLESHOOTING.md) — common errors.
+
 ## Approach
 
 See [WriteUp.md](WriteUp.md) for the full methodology and references.
