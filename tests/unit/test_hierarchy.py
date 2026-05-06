@@ -50,9 +50,7 @@ def test_bottom_sums_match_total_per_date(toy_long: pd.DataFrame) -> None:
 
     hier = build_hierarchy(toy_long)
     totals = hier.Y_df[hier.Y_df["unique_id"] == "Total"].set_index("ds")["y"]
-    bottom = (
-        hier.Y_df[hier.Y_df["unique_id"].isin(hier.bottom_ids)].groupby("ds")["y"].sum()
-    )
+    bottom = hier.Y_df[hier.Y_df["unique_id"].isin(hier.bottom_ids)].groupby("ds")["y"].sum()
     np.testing.assert_allclose(totals.to_numpy(), bottom.to_numpy(), rtol=1e-6)
 
 

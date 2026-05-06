@@ -95,9 +95,7 @@ class LGBMRecipe(_Frozen):
     kind: Literal["lgbm"] = "lgbm"
     params: dict[str, Any] = Field(default_factory=dict)
     lags: LagSpec = Field(default_factory=LagSpec)
-    date_features: list[str] = Field(
-        default_factory=lambda: ["dayofweek", "day", "week", "month", "year"]
-    )
+    date_features: list[str] = Field(default_factory=lambda: ["dayofweek", "day", "week", "month", "year"])
 
 
 class StatsModelSpec(_Frozen):
@@ -214,9 +212,7 @@ _STATS_MODEL_REGISTRY = {
 
 def _resolve_stats_class(name: str) -> Any:
     if name not in _STATS_MODEL_REGISTRY:
-        raise ValueError(
-            f"Unknown stats model {name!r}. Known: {sorted(_STATS_MODEL_REGISTRY)}"
-        )
+        raise ValueError(f"Unknown stats model {name!r}. Known: {sorted(_STATS_MODEL_REGISTRY)}")
     mod_path, cls_name = _STATS_MODEL_REGISTRY[name].split(":")
     import importlib
 
@@ -274,7 +270,9 @@ def _mintrace(method: str) -> Any:
 def build_hier_base_from_recipe(recipe: Recipe, *, n_jobs: int = -1) -> Any:
     """Build the base StatsForecast learner used at every hierarchy level."""
     if not isinstance(recipe.model, HierRecipe):
-        raise TypeError(f"build_hier_base_from_recipe: recipe.model.kind={recipe.model.kind!r}, expected 'hier'")
+        raise TypeError(
+            f"build_hier_base_from_recipe: recipe.model.kind={recipe.model.kind!r}, expected 'hier'"
+        )
     from statsforecast import StatsForecast
 
     base = _instantiate_stats_model(recipe.model.base_model)
@@ -284,7 +282,9 @@ def build_hier_base_from_recipe(recipe: Recipe, *, n_jobs: int = -1) -> Any:
 def build_hier_reconcilers_from_recipe(recipe: Recipe) -> list[Any]:
     """Build the reconciler list for a hierarchical recipe."""
     if not isinstance(recipe.model, HierRecipe):
-        raise TypeError(f"build_hier_reconcilers_from_recipe: recipe.model.kind={recipe.model.kind!r}, expected 'hier'")
+        raise TypeError(
+            f"build_hier_reconcilers_from_recipe: recipe.model.kind={recipe.model.kind!r}, expected 'hier'"
+        )
     return [_RECONCILER_BUILDERS[name]() for name in recipe.model.reconcilers]
 
 

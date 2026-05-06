@@ -41,10 +41,7 @@ def build_stats_forecaster(
     assert recipe.model.kind == "stats"
 
     # Apply per-call overrides by patching every model spec's season_length.
-    new_specs = [
-        spec.model_copy(update={"season_length": season_length})
-        for spec in recipe.model.models
-    ]
+    new_specs = [spec.model_copy(update={"season_length": season_length}) for spec in recipe.model.models]
     new_model = recipe.model.model_copy(update={"models": new_specs})
     new_task = recipe.task.model_copy(update={"freq": freq})
     recipe = recipe.model_copy(update={"task": new_task, "model": new_model})
