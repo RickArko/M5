@@ -225,10 +225,10 @@ def per_level_scores(inp: ScoringInputs) -> pd.DataFrame:
         agg_train["unique_id"] = _join_keys(agg_train, level_spec)
         components = _level_components(agg_train)
 
-        agg_cv_groups = cv.groupby([*level_spec, "ds"], observed=True)
-        agg_cv = agg_cv_groups.agg(y=("y", "sum")).reset_index()
+        agg_dict: dict[str, tuple[str, str]] = {"y": ("y", "sum")}
         for m in inp.models:
-            agg_cv[m] = agg_cv_groups[m].sum().to_numpy()
+            agg_dict[m] = (m, "sum")
+        agg_cv = cv.groupby([*level_spec, "ds"], observed=True).agg(**agg_dict).reset_index()
         agg_cv["unique_id"] = _join_keys(agg_cv, level_spec)
 
         truth = agg_cv[["unique_id", "ds", "y"]]
