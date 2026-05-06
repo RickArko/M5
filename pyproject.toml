@@ -56,6 +56,7 @@ dev = [
     "pandas-stubs>=2.2",
     "types-tqdm>=4.67",
     "types-pyyaml>=6.0",
+    "pre-commit>=4.0",
 ]
 notebook = [
     "jupyter>=1.1",

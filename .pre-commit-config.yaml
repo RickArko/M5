@@ -1,0 +1,40 @@
+# Pre-commit hooks — mirror what `make check` runs in CI, but at commit time.
+# Install with `make install` (or `uv run pre-commit install`).
+# Run on all files:    uv run pre-commit run --all-files
+# Update hook versions: uv run pre-commit autoupdate
+
+repos:
+  # Standard hygiene — whitespace, line endings, big-file guard.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.ipynb$
+      - id: end-of-file-fixer
+        exclude: \.ipynb$
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # Ruff — same as `make lint` / `make fmt`.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  # mypy — same as `make typecheck`. Local hook so it uses the project venv
+  # (which already has pandas-stubs / types-pyyaml / etc. from the dev group).
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (src/m5)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        files: ^src/m5/
