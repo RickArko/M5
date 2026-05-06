@@ -208,6 +208,21 @@ def score(
     bootstrap_iter: int = typer.Option(1000, help="Bootstrap resamples for significance matrix."),
     formats: str = typer.Option("png,svg,pdf", help="Figure formats to save (comma-separated)."),
     no_report: bool = typer.Option(False, help="Skip markdown/HTML stitching; only write figures + metrics."),
+    fva_baseline: str = typer.Option(
+        "SeasonalNaive",
+        "--fva-baseline",
+        help="Forecast-column name to use as the FVA benchmark. Skipped if column not present.",
+    ),
+    fva_metric: str = typer.Option(
+        "mae",
+        "--fva-metric",
+        help="FVA basis: mae | rmse | smape | wrmsse. Vandeput recommends mae.",
+    ),
+    fva_chain_arg: str = typer.Option(
+        "",
+        "--fva-chain",
+        help="Optional ordered chain (comma-separated forecast columns) for the waterfall figure.",
+    ),
 ) -> None:
     """Score CV artifacts; emit metrics, figures, and a Markdown + HTML report."""
     from m5.evaluation import compute_components
@@ -217,6 +232,9 @@ def score(
         ScoringInputs,
         bias_variance_decomposition,
         error_concentration,
+        fva_chain,
+        fva_per_fold,
+        fva_scores,
         headline_scores,
         paired_bootstrap_pvalues,
         per_fold_scores,
@@ -278,6 +296,26 @@ def score(
     residuals = residuals_long(inp)
     error_curves = error_concentration(inp)
 
+    fva_star_df: pd.DataFrame | None = None
+    fva_chain_df: pd.DataFrame | None = None
+    fva_per_fold_df: pd.DataFrame | None = None
+    if fva_baseline and fva_baseline in forecast_cols:
+        logger.info(f"score: computing FVA vs {fva_baseline} ({fva_metric.upper()})")
+        fva_star_df = fva_scores(inp, baseline=fva_baseline, metric=fva_metric)
+        fva_per_fold_df = fva_per_fold(inp, baseline=fva_baseline, metric=fva_metric)
+    elif fva_baseline:
+        logger.warning(
+            f"score: FVA baseline {fva_baseline!r} not in forecast columns {forecast_cols} — skipping FVA."
+        )
+
+    if fva_chain_arg:
+        chain_steps = [s.strip() for s in fva_chain_arg.split(",") if s.strip()]
+        missing = [s for s in chain_steps if s not in forecast_cols]
+        if missing:
+            logger.warning(f"score: chain steps not found {missing} — skipping waterfall.")
+        elif len(chain_steps) >= 2:
+            fva_chain_df = fva_chain(inp, chain=chain_steps, metric=fva_metric)
+
     out.mkdir(parents=True, exist_ok=True)
     metrics_dir = out / "metrics"
     metrics_dir.mkdir(parents=True, exist_ok=True)
@@ -294,6 +332,13 @@ def score(
     if pvalues is not None:
         pvalues.to_parquet(metrics_dir / "pvalues.parquet")
     error_curves.to_parquet(metrics_dir / "error_concentration.parquet", index=False)
+    if fva_star_df is not None:
+        fva_star_df.to_parquet(metrics_dir / "fva_star.parquet", index=False)
+        fva_star_df.to_csv(metrics_dir / "fva_star.csv", index=False)
+    if fva_per_fold_df is not None:
+        fva_per_fold_df.to_parquet(metrics_dir / "fva_per_fold.parquet", index=False)
+    if fva_chain_df is not None:
+        fva_chain_df.to_parquet(metrics_dir / "fva_chain.parquet", index=False)
     logger.info(f"score: wrote metrics → {metrics_dir}")
 
     logger.info("score: building figures …")
@@ -310,6 +355,9 @@ def score(
         cv_df=cv_df,
         train=train,
         models=forecast_cols,
+        fva_star=fva_star_df,
+        fva_chain_df=fva_chain_df,
+        fva_per_fold_df=fva_per_fold_df,
     )
 
     fig_dir = out / "figures"
@@ -341,6 +389,10 @@ def score(
     for cut, df in segment_frames.items():
         if not df.empty:
             extras.append((f"Per-segment WRMSSE ({cut})", df))
+    if fva_star_df is not None and not fva_star_df.empty:
+        extras.append((f"FVA vs {fva_baseline} ({fva_metric.upper()})", fva_star_df))
+    if fva_chain_df is not None and not fva_chain_df.empty:
+        extras.append(("FVA chain", fva_chain_df.drop(columns=["is_baseline"], errors="ignore")))
     paths = render_report(
         bundle,
         metadata=metadata,

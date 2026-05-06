@@ -13,6 +13,7 @@ aggregates, and re-normalises components for each axis.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import pandas as pd
@@ -26,6 +27,9 @@ __all__ = [
     "bias_variance_decomposition",
     "discover_models",
     "error_concentration",
+    "fva_chain",
+    "fva_per_fold",
+    "fva_scores",
     "headline_scores",
     "paired_bootstrap_pvalues",
     "per_fold_scores",
@@ -34,6 +38,12 @@ __all__ = [
     "per_segment_scores",
     "residuals_long",
 ]
+
+# Metrics permitted as the FVA basis. We default to MAE because Vandeput
+# explicitly recommends it over MAPE; the others are exposed for callers who
+# want their FVA expressed in the same units as the M5 leaderboard (WRMSSE) or
+# the more familiar squared-error world (RMSE).
+_FVA_METRICS = ("mae", "rmse", "smape", "wrmsse")
 
 _PROTECTED = frozenset({"unique_id", "ds", "y", "cutoff"})
 
@@ -366,3 +376,183 @@ def residuals_long(inp: ScoringInputs) -> pd.DataFrame:
         merged["model"] = m
         rows.append(merged[["model", "unique_id", "ds", "y", m, "residual"]].rename(columns={m: "y_hat"}))
     return pd.concat(rows, ignore_index=True)
+
+
+# --------------------------------------------------------------------------- #
+# Forecast Value Added (Vandeput, "Forecast Value Added", 2021)               #
+# --------------------------------------------------------------------------- #
+def _scalar_metric(
+    truth: pd.DataFrame,
+    forecast_col: str,
+    cv_df: pd.DataFrame,
+    *,
+    components: WRMSSEComponents,
+    metric: str,
+) -> float:
+    """One-number summary used by FVA. Weighted by the M5 dollar-weights so the
+    leaderboard view stays consistent across metrics.
+    """
+    if metric == "wrmsse":
+        return wrmsse(truth, cv_df.rename(columns={forecast_col: "y_hat"}), components)
+    ps = per_series_metrics(truth, cv_df.rename(columns={forecast_col: "y_hat"}), forecast_col="y_hat")
+    common = ps.index.intersection(components.weights.index)
+    if len(common) == 0:
+        return float("nan")
+    w = components.weights.loc[common]
+    w = w / w.sum() if w.sum() > 0 else w
+    return float((ps.loc[common, metric] * w).sum())
+
+
+def fva_scores(
+    inp: ScoringInputs,
+    *,
+    baseline: str,
+    metric: str = "mae",
+) -> pd.DataFrame:
+    """Star-mode FVA: every model in ``inp.models`` vs a single baseline.
+
+    FVA = error(baseline) − error(model)  (positive = adds value).
+
+    The framing follows Vandeput's "Forecast Value Added" article: pick a
+    benchmark (he prefers a moving average; SeasonalNaive is the canonical M5
+    one) and ask, for each downstream model, *does it actually beat the
+    benchmark, and by how much?* If FVA ≤ 0 across multiple folds, the model
+    is destroying value relative to the benchmark and the cost of running it
+    isn't justified.
+
+    Args:
+        baseline: Forecast column name to use as the benchmark.
+        metric: ``mae`` (Vandeput's preference), ``rmse``, ``smape``, or ``wrmsse``.
+
+    Returns:
+        DataFrame with columns ``model, baseline, metric, error_baseline,
+        error_model, fva_abs, fva_pct``. Sorted by ``fva_abs`` descending so
+        the row order is "best value-add first".
+    """
+    if metric not in _FVA_METRICS:
+        raise ValueError(f"Unknown FVA metric: {metric!r}. Use one of {_FVA_METRICS}.")
+    if baseline not in inp.models:
+        raise ValueError(
+            f"Baseline {baseline!r} not in inp.models {inp.models}. "
+            "Add it as a forecast column or pass a different baseline."
+        )
+    truth = inp.cv_df[["unique_id", "ds", "y"]]
+    base_err = _scalar_metric(truth, baseline, inp.cv_df, components=inp.components, metric=metric)
+    rows = []
+    for m in inp.models:
+        if m == baseline:
+            continue
+        m_err = _scalar_metric(truth, m, inp.cv_df, components=inp.components, metric=metric)
+        fva = base_err - m_err
+        rows.append(
+            {
+                "model": m,
+                "baseline": baseline,
+                "metric": metric,
+                "error_baseline": base_err,
+                "error_model": m_err,
+                "fva_abs": fva,
+                "fva_pct": (fva / base_err) if base_err > 0 else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows).sort_values("fva_abs", ascending=False).reset_index(drop=True)
+
+
+def fva_chain(
+    inp: ScoringInputs,
+    *,
+    chain: list[str],
+    metric: str = "mae",
+) -> pd.DataFrame:
+    """Chain-mode FVA: each step's improvement vs the previous step in ``chain``.
+
+    Use this when forecasts come out of an ordered process —
+    ``[Naive, Stats, LGBM, Ensemble]`` or ``[Baseline, Planner, Sales,
+    Consensus]`` — and you want to know which step actually adds value.
+
+    The first row's FVA is always zero (it's the baseline by construction);
+    subsequent rows show ``error(prev) − error(this)``. A negative bar is the
+    classic FVA red flag: that step is destroying accuracy.
+    """
+    if metric not in _FVA_METRICS:
+        raise ValueError(f"Unknown FVA metric: {metric!r}. Use one of {_FVA_METRICS}.")
+    missing = [m for m in chain if m not in inp.models]
+    if missing:
+        raise ValueError(f"Chain step(s) not in inp.models: {missing}")
+    if len(chain) < 2:
+        raise ValueError("Chain needs at least 2 steps (a baseline + something to compare).")
+
+    truth = inp.cv_df[["unique_id", "ds", "y"]]
+    errs = {m: _scalar_metric(truth, m, inp.cv_df, components=inp.components, metric=metric) for m in chain}
+    rows = [
+        {
+            "step": chain[0],
+            "previous": "",
+            "metric": metric,
+            "error_previous": float("nan"),
+            "error_step": errs[chain[0]],
+            "fva_abs": 0.0,
+            "fva_pct": 0.0,
+            "is_baseline": True,
+        }
+    ]
+    for prev, curr in pairwise(chain):
+        prev_err = errs[prev]
+        curr_err = errs[curr]
+        fva = prev_err - curr_err
+        rows.append(
+            {
+                "step": curr,
+                "previous": prev,
+                "metric": metric,
+                "error_previous": prev_err,
+                "error_step": curr_err,
+                "fva_abs": fva,
+                "fva_pct": (fva / prev_err) if prev_err > 0 else float("nan"),
+                "is_baseline": False,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def fva_per_fold(
+    inp: ScoringInputs,
+    *,
+    baseline: str,
+    metric: str = "mae",
+) -> pd.DataFrame:
+    """Per-(model, cutoff) FVA against ``baseline`` — Vandeput's "track over
+    multiple cycles" guidance, so a single lucky/unlucky fold doesn't drive
+    the conclusion.
+    """
+    if metric not in _FVA_METRICS:
+        raise ValueError(f"Unknown FVA metric: {metric!r}. Use one of {_FVA_METRICS}.")
+    if baseline not in inp.models:
+        raise ValueError(f"Baseline {baseline!r} not in inp.models {inp.models}.")
+    rows = []
+    for cutoff, fold in inp.cv_df.groupby("cutoff", observed=True):
+        truth = fold[["unique_id", "ds", "y"]]
+        try:
+            base_err = _scalar_metric(truth, baseline, fold, components=inp.components, metric=metric)
+        except ValueError:
+            continue
+        ts = pd.Timestamp(cutoff)  # type: ignore[arg-type]
+        for m in inp.models:
+            if m == baseline:
+                continue
+            try:
+                m_err = _scalar_metric(truth, m, fold, components=inp.components, metric=metric)
+            except ValueError:
+                continue
+            rows.append(
+                {
+                    "model": m,
+                    "baseline": baseline,
+                    "cutoff": ts,
+                    "metric": metric,
+                    "error_baseline": base_err,
+                    "error_model": m_err,
+                    "fva_abs": base_err - m_err,
+                }
+            )
+    return pd.DataFrame(rows)

@@ -15,6 +15,9 @@ from m5.scoring import (
     ScoringInputs,
     bias_variance_decomposition,
     error_concentration,
+    fva_chain,
+    fva_per_fold,
+    fva_scores,
     headline_scores,
     paired_bootstrap_pvalues,
     per_fold_scores,
@@ -55,6 +58,9 @@ def test_full_render_produces_expected_artifacts(
     pvalues = paired_bootstrap_pvalues(inp, n_iter=50, seed=1)
     residuals = residuals_long(inp)
     error_curves = error_concentration(inp)
+    fva_star = fva_scores(inp, baseline="Biased", metric="mae")
+    fva_pf = fva_per_fold(inp, baseline="Biased", metric="mae")
+    fva_chain_df = fva_chain(inp, chain=["Naive", "Biased", "Perfect"], metric="mae")
 
     bundle = build_all_figures(
         headline=headline,
@@ -69,6 +75,9 @@ def test_full_render_produces_expected_artifacts(
         cv_df=toy_cv,
         train=toy_train_for_cv,
         models=inp.models,
+        fva_star=fva_star,
+        fva_chain_df=fva_chain_df,
+        fva_per_fold_df=fva_pf,
     )
 
     fig_dir = tmp_path / "figures"
@@ -90,6 +99,9 @@ def test_full_render_produces_expected_artifacts(
         "08_residuals_time",
         "09_residual_histogram",
         "11_forecast_examples",
+        "13_fva_star",
+        "14_fva_waterfall",
+        "15_fva_per_fold",
     }
     assert must_have.issubset(set(bundle.figures.keys())), (
         f"missing figures: {must_have - set(bundle.figures.keys())}"
