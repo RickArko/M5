@@ -70,7 +70,7 @@ jobs:
           python -c "import m5; print('m5 version:', m5.__version__)"
           m5 --help > /dev/null
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: m5-dist
           path: dist/*
