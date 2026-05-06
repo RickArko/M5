@@ -431,12 +431,13 @@ def fig_forecast_examples(
         recent = hist[hist["ds"] >= cutoff_max - pd.Timedelta(days=history_days)]
         ax.plot(recent["ds"], recent["y"], color="#444", linewidth=1.2, label="actual (history)", alpha=0.7)
         fold = cv_df[cv_df["unique_id"] == sid].sort_values("ds")
-        ax.plot(fold["ds"], fold["y"], color="black", linewidth=1.6, label="actual")
-        for m in models:
-            if m not in fold.columns:
-                continue
-            ax.plot(fold["ds"], fold[m], color=model_color(m), linewidth=1.4, alpha=0.9, label=m)
-        ax.axvspan(fold["ds"].min(), fold["ds"].max(), color="#ffe6cc", alpha=0.35, zorder=0)
+        if not fold.empty:
+            ax.plot(fold["ds"], fold["y"], color="black", linewidth=1.6, label="actual")
+            for m in models:
+                if m not in fold.columns:
+                    continue
+                ax.plot(fold["ds"], fold[m], color=model_color(str(m)), linewidth=1.4, alpha=0.9, label=m)
+            ax.axvspan(fold["ds"].min(), fold["ds"].max(), color="#ffe6cc", alpha=0.35, zorder=0)
         ax.set_title(sid, fontsize=10)
         ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=4))
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
