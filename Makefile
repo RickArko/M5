@@ -34,10 +34,14 @@ help: ## Show this help
 bootstrap: ## First-time setup (installs uv, syncs deps, downloads M5 data)
 	@bash scripts/bootstrap.sh
 
-install: ## Sync deps, register Jupyter kernel, print activation hint
+install: ## Sync deps, register Jupyter kernel, install pre-commit hooks, print activation hint
 	$(UV) sync --all-groups
 	@echo "==> Registering Jupyter kernel 'm5'"
 	@$(UV) run python -m ipykernel install --user --name m5 --display-name "Python (m5)" >/dev/null
+	@if [ -d .git ]; then \
+	    echo "==> Installing pre-commit hooks"; \
+	    $(UV) run pre-commit install >/dev/null; \
+	fi
 	@if [ ! -f .env ] && [ -f .env.example ]; then \
 	    echo "==> Seeding .env from .env.example"; \
 	    cp .env.example .env; \

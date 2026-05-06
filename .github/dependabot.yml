@@ -1,0 +1,45 @@
+# Dependabot — auto-PR stale Actions versions and Python deps.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+
+updates:
+  # GitHub Actions used in .github/workflows/*
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+
+  # Python deps — reads pyproject.toml + uv.lock
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+    # Group related bumps so a forecasting-stack rev lands as one PR, not five.
+    groups:
+      forecasting:
+        patterns:
+          - "statsforecast"
+          - "mlforecast"
+          - "utilsforecast"
+          - "datasetsforecast"
+          - "hierarchicalforecast"
+      dev-tools:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "pytest*"
+          - "*-stubs"
+          - "types-*"
+          - "pre-commit"

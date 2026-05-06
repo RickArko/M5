@@ -30,7 +30,13 @@ fi
 echo "==> Registering Jupyter kernel 'm5'"
 uv run python -m ipykernel install --user --name m5 --display-name "Python (m5)" >/dev/null
 
-# 5) Download data ---------------------------------------------------
+# 5) Install pre-commit hooks (idempotent) --------------------------
+if [ -d .git ]; then
+    echo "==> Installing pre-commit hooks"
+    uv run pre-commit install >/dev/null
+fi
+
+# 6) Download data ---------------------------------------------------
 if [ ! -d data/m5/datasets ]; then
     echo "==> Downloading M5 raw data (one-time, ~250MB)"
     uv run m5 download
