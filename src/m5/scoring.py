@@ -208,18 +208,11 @@ def per_level_scores(inp: ScoringInputs) -> pd.DataFrame:
     )
 
     def _join_keys(df: pd.DataFrame, cols: list[str]) -> pd.Series:
-        parts: list[pd.Series] = []
-        for c in cols:
-            col = df[c]
-            if isinstance(col, pd.DataFrame):
-                col = col.iloc[:, 0]
-            parts.append(col.astype(str))
-        if len(parts) == 1:
-            return parts[0].reset_index(drop=True)
-        out = parts[0]
-        for p in parts[1:]:
-            out = out + "/" + p
-        return out.reset_index(drop=True)
+        # ``df[[c]].agg("/".join, axis=1)`` returns a DataFrame on single-key
+        # specs, so branch on length.
+        if len(cols) == 1:
+            return df[cols[0]].astype(str)
+        return df[cols].astype(str).agg("/".join, axis=1)
 
     rows = []
     for level_spec in M5_LEVELS_SPEC:
@@ -232,10 +225,10 @@ def per_level_scores(inp: ScoringInputs) -> pd.DataFrame:
         agg_train["unique_id"] = _join_keys(agg_train, level_spec)
         components = _level_components(agg_train)
 
-        agg_dict: dict[str, tuple[str, str]] = {"y": ("y", "sum")}
+        agg_cv_groups = cv.groupby([*level_spec, "ds"], observed=True)
+        agg_cv = agg_cv_groups.agg(y=("y", "sum")).reset_index()
         for m in inp.models:
-            agg_dict[m] = (m, "sum")
-        agg_cv = cv.groupby([*level_spec, "ds"], observed=True).agg(**agg_dict).reset_index()
+            agg_cv[m] = agg_cv_groups[m].sum().to_numpy()
         agg_cv["unique_id"] = _join_keys(agg_cv, level_spec)
 
         truth = agg_cv[["unique_id", "ds", "y"]]
