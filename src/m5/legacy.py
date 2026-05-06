@@ -52,9 +52,7 @@ def filter_data(dflong: pd.DataFrame, last_n: int | None = None) -> pd.DataFrame
     if last_n is not None:
         logger.info(f"Drop training data older than {last_n:,d} days old")
 
-    without_leading_zeros = (
-        dflong["y"].gt(0).groupby(dflong["id"], observed=True).transform("cummax")
-    )
+    without_leading_zeros = dflong["y"].gt(0).groupby(dflong["id"], observed=True).transform("cummax")
     keep_mask = without_leading_zeros & above_min_date
     dflong = dflong[keep_mask].reset_index(drop=True)
     logger.info(f"Rows of processed input data: {dflong.shape[0]:,d}")
@@ -78,9 +76,7 @@ def create_m5_fit_data(
     long = long.merge(cal, on=["d"])
     long = long.merge(prices, on=["store_id", "item_id", "wm_yr_wk"])
     long = filter_data(long, last_n=last_n)
-    logger.debug(
-        f"Finished creating M5 fit data thru {long['date'].max()} in {time.time() - t0:,.1f}s"
-    )
+    logger.debug(f"Finished creating M5 fit data thru {long['date'].max()} in {time.time() - t0:,.1f}s")
     return long
 
 
@@ -98,10 +94,7 @@ def create_future_features(
     future_cal = cal[cal["date"].between(val_start, val_end)]
     future_prices = prices[prices["wm_yr_wk"] >= last_wmyrwk].copy()
     future_prices["id"] = (
-        future_prices["item_id"].astype(str)
-        + "_"
-        + future_prices["store_id"].astype(str)
-        + "_evaluation"
+        future_prices["item_id"].astype(str) + "_" + future_prices["store_id"].astype(str) + "_evaluation"
     )
     return future_prices.merge(future_cal, on="wm_yr_wk").drop(
         columns=["store_id", "item_id", "wm_yr_wk", "d"]
@@ -138,9 +131,7 @@ def load_train_parquet(path: Path | str | None = None) -> pd.DataFrame:
         p = legacy if legacy.exists() else TRAIN_PARQUET_PATH
 
     if not p.exists():
-        raise FileNotFoundError(
-            f"{p} not found. Run `make prep` first to build the training parquet."
-        )
+        raise FileNotFoundError(f"{p} not found. Run `make prep` first to build the training parquet.")
 
     df = pd.read_parquet(p)
     if "unique_id" in df.columns:

@@ -78,9 +78,12 @@ extend-exclude = ["notebooks/*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "PD", "RUF"]
-# B008 — Typer pattern uses typer.Option(...) in defaults
-# RUF002 — allow unicode `×` / `→` in docstrings
-ignore = ["E501", "B008", "RUF001", "RUF002"]
+# B008    — Typer pattern uses typer.Option(...) in defaults
+# RUF002  — allow unicode `×` / `→` in docstrings
+# PD013   — `.stack().idxmin()` returns a MultiIndex; `.melt()` doesn't preserve it
+# SIM105  — `try/except/pass` is fine here; `contextlib.suppress` isn't strictly clearer
+# SIM108  — `if/else` reads better than nested ternaries when branches diverge
+ignore = ["E501", "B008", "RUF001", "RUF002", "PD013", "SIM105", "SIM108"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B", "PD"]

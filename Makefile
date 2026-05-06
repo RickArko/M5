@@ -5,13 +5,16 @@
 .PHONY: help bootstrap install activate lint fmt typecheck test test-smoke test-unit \
         test-integration test-fast cov check \
         download prep cv-stats cv-lgbm cv-hier cv-recipe forecast-stats forecast-lgbm forecast-hier \
-        notebook clean clean-all
+        score score-all eval notebook clean clean-all
 
 UV       ?= uv
 VENV     ?= .venv
 HORIZON  ?= 28
 WINDOWS  ?= 3
 MODEL    ?= stats
+MODELS   ?= stats lgbm
+REPORT   ?= reports
+RUN_ID   ?= latest
 
 # Pin uv's project environment to the path the rest of the toolchain expects
 # (.vscode/settings.json, the README activate snippet, scripts/bootstrap.sh).
@@ -121,6 +124,26 @@ forecast-lgbm: ## Train+predict LightGBM global model
 
 forecast-hier: ## Train+predict hierarchical (Theta base, 4 reconcilers)
 	$(UV) run m5 forecast hier --horizon $(HORIZON)
+
+# ---- Scoring + report ----------------------------------------------
+# `make score MODELS="stats lgbm"` reads artifacts/cv_<m>.parquet for each
+# model, computes the full metric pack, and writes figures + report under
+# $(REPORT)/. `make score-all` is the convenience batch.
+
+score: ## Score CV artifacts → reports/{figures,metrics,report.md,report.html} (MODELS="stats lgbm")
+	@set -e; CMD="$(UV) run m5 score --out $(REPORT) --run-id $(RUN_ID)"; \
+	for m in $(MODELS); do CMD="$$CMD --model $$m"; done; \
+	echo "$$CMD"; eval $$CMD
+
+score-all: ## Score every CV artifact found in artifacts/ (cv_<name>.parquet)
+	@set -e; \
+	models=$$(ls artifacts/cv_*.parquet 2>/dev/null | sed -e 's|artifacts/cv_||' -e 's|\.parquet$$||'); \
+	if [ -z "$$models" ]; then echo "No artifacts/cv_*.parquet found — run a cv-* target first." >&2; exit 1; fi; \
+	CMD="$(UV) run m5 score --out $(REPORT) --run-id $(RUN_ID)"; \
+	for m in $$models; do CMD="$$CMD --model $$m"; done; \
+	echo "$$CMD"; eval $$CMD
+
+eval: cv-stats cv-lgbm score ## End-to-end: stats + lgbm CV, then score the merged report
 
 # ---- Notebooks -----------------------------------------------------
 

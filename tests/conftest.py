@@ -91,3 +91,59 @@ def small_holdout(toy_long: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Train/holdout split with a 14-day evaluation window."""
     cutoff = toy_long["ds"].max() - pd.Timedelta(days=14)
     return toy_long[toy_long["ds"] <= cutoff].copy(), toy_long[toy_long["ds"] > cutoff].copy()
+
+
+@pytest.fixture()
+def toy_cv(toy_long: pd.DataFrame) -> pd.DataFrame:
+    """Synthetic CV frame: 2 folds × 14 days × 3 series × 3 forecast columns.
+
+    Forecast columns are chosen so they have a clear leaderboard ordering:
+        Perfect  — equals truth (WRMSSE = 0)
+        Biased   — truth + 1.5 (well-defined positive WRMSSE)
+        Naive    — last-week-of-train value broadcast across the fold
+    """
+    h = 14
+    max_ds = toy_long["ds"].max()
+    folds = []
+    for k in range(2):
+        cutoff = max_ds - pd.Timedelta(days=(2 - k) * h)
+        fold = toy_long[(toy_long["ds"] > cutoff) & (toy_long["ds"] <= cutoff + pd.Timedelta(days=h))].copy()
+        fold["cutoff"] = pd.Timestamp(cutoff)
+        fold["Perfect"] = fold["y"].astype("float64")
+        fold["Biased"] = (fold["y"] + 1.5).astype("float64")
+        last_train = (
+            toy_long[toy_long["ds"] <= cutoff]
+            .sort_values(["unique_id", "ds"])
+            .groupby("unique_id", observed=True)["y"]
+            .tail(7)
+            .groupby(toy_long.loc[toy_long["ds"] <= cutoff, "unique_id"], observed=True)
+            .mean()
+        )
+        fold["Naive"] = fold["unique_id"].map(last_train).astype("float64")
+        folds.append(
+            fold[
+                [
+                    "unique_id",
+                    "ds",
+                    "cutoff",
+                    "y",
+                    "Perfect",
+                    "Biased",
+                    "Naive",
+                    "item_id",
+                    "dept_id",
+                    "cat_id",
+                    "store_id",
+                    "state_id",
+                    "sell_price",
+                ]
+            ]
+        )
+    return pd.concat(folds, ignore_index=True)
+
+
+@pytest.fixture()
+def toy_train_for_cv(toy_long: pd.DataFrame, toy_cv: pd.DataFrame) -> pd.DataFrame:
+    """Training slice ending strictly before the first CV cutoff."""
+    first_cv_ds = toy_cv["ds"].min()
+    return toy_long[toy_long["ds"] < first_cv_ds].copy()

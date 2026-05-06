@@ -36,10 +36,12 @@ def _lgbm_recipe_default_lags() -> tuple[int, ...]:
     assert r.model.kind == "lgbm"
     return tuple(r.model.lags.lags)
 
+
 def _lgbm_recipe_default_rolls() -> tuple[int, ...]:
     r = _load_lgbm_recipe()
     assert r.model.kind == "lgbm"
     return tuple(r.model.lags.rolling_means_lagged.get(1, []))
+
 
 # Module-level constants kept for back-compat; sourced from the YAML at import time
 # so a recipe edit is a single-place change.
@@ -61,6 +63,7 @@ def lgbm_params(seed: int = SETTINGS.seed) -> dict[str, Any]:
     recipe = _load_lgbm_recipe()
     assert recipe.model.kind == "lgbm"
     return {**recipe.model.params, "seed": seed}
+
 
 def build_lgbm_forecaster(
     *,
@@ -101,7 +104,9 @@ def fit_predict_lgbm(
     + static categoricals only, so ``.predict(h)`` works without a future frame.
     """
     n_rows, n_series = len(df), df["unique_id"].nunique()
-    logger.info(f"fit_predict_lgbm: features → {n_series:,d} series × {n_rows // max(n_series, 1):,d} rows each")
+    logger.info(
+        f"fit_predict_lgbm: features → {n_series:,d} series × {n_rows // max(n_series, 1):,d} rows each"
+    )
     t0 = time.time()
     df = build_feature_frame(df.copy())
     statics_present = [c for c in static_cols if c in df.columns]

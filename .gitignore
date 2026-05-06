@@ -41,6 +41,7 @@ data/
 DS-CaseStudy-SalesForecast/
 artifacts/
 forecasts/
+reports/
 *.parquet
 *.csv
 !tests/fixtures/*.csv

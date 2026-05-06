@@ -6,7 +6,7 @@
 repos:
   # Standard hygiene — whitespace, line endings, big-file guard.
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: \.ipynb$
@@ -21,14 +21,15 @@ repos:
 
   # Ruff — same as `make lint` / `make fmt`.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.15.12
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: ["--fix"]
       - id: ruff-format
 
-  # mypy — same as `make typecheck`. Local hook so it uses the project venv
-  # (which already has pandas-stubs / types-pyyaml / etc. from the dev group).
+  # mypy — same as `make typecheck`. Runs on `git push`, not every commit:
+  # mypy walks the full `src/m5` tree (slow) and we'd rather iterate on commits
+  # without that on the hot path. Push is the right gate for the type contract.
   - repo: local
     hooks:
       - id: mypy
@@ -38,3 +39,4 @@ repos:
         types: [python]
         pass_filenames: false
         files: ^src/m5/
+        stages: [pre-push]
