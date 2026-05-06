@@ -84,6 +84,13 @@ def wrmsse(
     mse_per_series = err_sq.groupby(merged[id_col], observed=True).mean()
 
     common = components.weights.index.intersection(mse_per_series.index)
+    if len(common) == 0:
+        raise ValueError(
+            "WRMSSE components share no unique_ids with the forecast — likely the "
+            "training frame used for compute_components doesn't match the CV frame. "
+            f"forecast has {mse_per_series.index.nunique()} series; "
+            f"components have {components.weights.index.nunique()} series."
+        )
     rmsse = np.sqrt(mse_per_series.loc[common] / components.scales.loc[common])
     return float((components.weights.loc[common] * rmsse).sum())
 

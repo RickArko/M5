@@ -33,6 +33,9 @@ __all__ = [
     "fig_bias_variance",
     "fig_calibration",
     "fig_forecast_examples",
+    "fig_fva_per_fold",
+    "fig_fva_star",
+    "fig_fva_waterfall",
     "fig_leaderboard",
     "fig_lorenz",
     "fig_per_fold_stability",
@@ -431,12 +434,13 @@ def fig_forecast_examples(
         recent = hist[hist["ds"] >= cutoff_max - pd.Timedelta(days=history_days)]
         ax.plot(recent["ds"], recent["y"], color="#444", linewidth=1.2, label="actual (history)", alpha=0.7)
         fold = cv_df[cv_df["unique_id"] == sid].sort_values("ds")
-        ax.plot(fold["ds"], fold["y"], color="black", linewidth=1.6, label="actual")
-        for m in models:
-            if m not in fold.columns:
-                continue
-            ax.plot(fold["ds"], fold[m], color=model_color(m), linewidth=1.4, alpha=0.9, label=m)
-        ax.axvspan(fold["ds"].min(), fold["ds"].max(), color="#ffe6cc", alpha=0.35, zorder=0)
+        if not fold.empty:
+            ax.plot(fold["ds"], fold["y"], color="black", linewidth=1.6, label="actual")
+            for m in models:
+                if m not in fold.columns:
+                    continue
+                ax.plot(fold["ds"], fold[m], color=model_color(str(m)), linewidth=1.4, alpha=0.9, label=m)
+            ax.axvspan(fold["ds"].min(), fold["ds"].max(), color="#ffe6cc", alpha=0.35, zorder=0)
         ax.set_title(sid, fontsize=10)
         ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=4))
         ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
@@ -476,6 +480,135 @@ def fig_lorenz(error_curves: pd.DataFrame) -> Figure | None:
 
 
 # --------------------------------------------------------------------------- #
+# Figure 13 — FVA bars (every model vs baseline)                              #
+# --------------------------------------------------------------------------- #
+_FVA_GREEN = "#2ca02c"  # adds value
+_FVA_RED = "#d62728"  # destroys value
+_FVA_GREY = "#888888"  # neutral / baseline
+
+
+def fig_fva_star(fva: pd.DataFrame) -> Figure | None:
+    """Per-model FVA bars vs the configured baseline.
+
+    Positive bars (green) = the model beats the baseline by ``fva_abs`` on the
+    chosen metric (default MAE per Vandeput). Negative bars (red) = the model
+    is destroying value relative to the baseline and the cost of running it
+    isn't justified.
+    """
+    if fva.empty:
+        return None
+    df = fva.sort_values("fva_abs")
+    fig, ax = plt.subplots(figsize=(8, max(2.5, 0.5 * len(df) + 1.5)))
+    colors = [_FVA_GREEN if v >= 0 else _FVA_RED for v in df["fva_abs"]]
+    ax.barh(df["model"], df["fva_abs"], color=colors, edgecolor="white")
+    ax.axvline(0, color="black", linewidth=0.8)
+    metric = str(df["metric"].iloc[0]).upper()
+    baseline = str(df["baseline"].iloc[0])
+    ax.set_xlabel(f"FVA ({metric}) — positive = beats {baseline}")
+    ax.set_title(f"Forecast Value Added vs {baseline}")
+    for _, row in df.iterrows():
+        ax.text(
+            row["fva_abs"],
+            row["model"],
+            f"  {row['fva_abs']:+.4f}  ({row['fva_pct']:+.1%})"
+            if pd.notna(row["fva_pct"])
+            else f"  {row['fva_abs']:+.4f}",
+            va="center",
+            ha="left" if row["fva_abs"] >= 0 else "right",
+            fontsize=9,
+        )
+    pad = 0.25 * max(abs(df["fva_abs"].min()), abs(df["fva_abs"].max()), 1e-9)
+    ax.set_xlim(df["fva_abs"].min() - pad, df["fva_abs"].max() + pad)
+    fig.tight_layout()
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Figure 14 — FVA waterfall (ordered chain)                                   #
+# --------------------------------------------------------------------------- #
+def fig_fva_waterfall(fva_chain_df: pd.DataFrame) -> Figure | None:
+    """Waterfall of an ordered FVA chain (e.g., Naive → Stats → LGBM → Ensemble).
+
+    Each bar is the *delta* in error vs the previous step. Green = improved
+    accuracy (FVA > 0), red = destroyed accuracy (FVA < 0). The dashed line
+    traces the running error level so a glance shows where the chain plateaus.
+    """
+    if fva_chain_df.empty or len(fva_chain_df) < 2:
+        return None
+    df = fva_chain_df.reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(max(6, 0.9 * len(df) + 2.5), 5))
+
+    err_step = df["error_step"].astype(float).to_numpy()
+    base_err = float(err_step[0])
+    ax.bar(0, base_err, color=_FVA_GREY, edgecolor="black", label=f"baseline = {df.loc[0, 'step']}")
+    ax.text(0, base_err, f"{base_err:.3f}", ha="center", va="bottom", fontsize=9)
+
+    for i in range(1, len(df)):
+        prev_err = float(err_step[i - 1])
+        curr_err = float(err_step[i])
+        delta = curr_err - prev_err  # negative = improved
+        color = _FVA_GREEN if delta < 0 else _FVA_RED
+        ax.bar(i, delta, bottom=prev_err, color=color, edgecolor="white")
+        # Connector + delta label.
+        ax.plot([i - 0.6, i - 0.4], [prev_err, prev_err], color="black", linestyle=":", linewidth=0.8)
+        ax.text(
+            i,
+            curr_err,
+            f"{-delta:+.3f}",
+            ha="center",
+            va="bottom" if delta < 0 else "top",
+            fontsize=9,
+            fontweight="semibold",
+            color=color,
+        )
+
+    ax.set_xticks(range(len(df)))
+    ax.set_xticklabels(df["step"], rotation=15, ha="right")
+    metric = str(df.loc[0, "metric"]).upper()
+    ax.set_ylabel(f"{metric}")
+    ax.set_title("FVA waterfall — each step's contribution to accuracy")
+    ax.set_ylim(0, max(df["error_step"].max() * 1.18, base_err * 1.05))
+    fig.tight_layout()
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Figure 15 — FVA per fold (Vandeput: don't trust a single cycle)             #
+# --------------------------------------------------------------------------- #
+def fig_fva_per_fold(fva_per_fold_df: pd.DataFrame) -> Figure | None:
+    """Per-(model, fold) FVA strip with a zero line.
+
+    Vandeput's strongest practical recommendation: track FVA across multiple
+    cycles, not a single one. Here, each model is one row of dots — one dot
+    per CV fold — with a tick at the mean. Models whose dots straddle the
+    zero line are "lucky-or-not" rather than systematically value-adding.
+    """
+    if fva_per_fold_df.empty:
+        return None
+    fig, ax = plt.subplots(figsize=(8, max(3.0, 0.45 * fva_per_fold_df["model"].nunique() + 2.0)))
+    models_sorted = (
+        fva_per_fold_df.groupby("model")["fva_abs"].mean().sort_values(ascending=False).index.tolist()
+    )
+    for i, m in enumerate(models_sorted):
+        scores = fva_per_fold_df.loc[fva_per_fold_df["model"] == m, "fva_abs"].to_numpy()
+        c = model_color(str(m))
+        ax.scatter(scores, np.full_like(scores, i, dtype=float), color=c, s=50, alpha=0.85, zorder=3)
+        ax.scatter([scores.mean()], [i], color=c, marker="|", s=600, linewidth=2.5, zorder=4)
+        if scores.size > 1:
+            ax.hlines(i, scores.min(), scores.max(), color=c, alpha=0.35, linewidth=2, zorder=2)
+    ax.axvline(0, color="black", linewidth=0.8)
+    ax.set_yticks(range(len(models_sorted)))
+    ax.set_yticklabels(models_sorted)
+    ax.invert_yaxis()
+    metric = str(fva_per_fold_df["metric"].iloc[0]).upper()
+    baseline = str(fva_per_fold_df["baseline"].iloc[0])
+    ax.set_xlabel(f"FVA ({metric}) per fold vs {baseline} — right of 0 = beats baseline")
+    ax.set_title("Per-fold FVA stability")
+    fig.tight_layout()
+    return fig
+
+
+# --------------------------------------------------------------------------- #
 # Bundle + dispatcher                                                          #
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
@@ -503,6 +636,9 @@ _FIGURE_ORDER: tuple[tuple[str, str], ...] = (
     ("10_calibration", "Calibration by forecast decile"),
     ("11_forecast_examples", "Forecast vs actual exemplars"),
     ("12_lorenz", "Error concentration (Lorenz)"),
+    ("13_fva_star", "Forecast Value Added — star (vs baseline)"),
+    ("14_fva_waterfall", "Forecast Value Added — chain waterfall"),
+    ("15_fva_per_fold", "Forecast Value Added — per-fold stability"),
 )
 
 _DEFAULT_CAPTIONS: dict[str, str] = {
@@ -556,6 +692,21 @@ _DEFAULT_CAPTIONS: dict[str, str] = {
         "Bowing above the diagonal means the heaviest series carry an "
         "outsized share of the error."
     ),
+    "13_fva_star": (
+        "Forecast Value Added (Vandeput, 2021): per-model improvement vs the "
+        "configured baseline. Negative bars are the FVA red flag — the model "
+        "is destroying accuracy and the cost of running it isn't justified."
+    ),
+    "14_fva_waterfall": (
+        "FVA waterfall over an ordered chain. Each bar is the incremental "
+        "change in error attributable to that step; green = added value, red "
+        "= destroyed value. Chain plateaus show diminishing returns."
+    ),
+    "15_fva_per_fold": (
+        "FVA across CV folds — Vandeput's strongest practical guidance is to "
+        "track over multiple cycles, not a single one. Models whose dots "
+        "straddle the zero line aren't reliably value-adding."
+    ),
 }
 
 
@@ -566,6 +717,9 @@ def _build_insights(
     per_level: pd.DataFrame,
     bv: pd.DataFrame,
     pvalues: pd.DataFrame | None,
+    fva_star: pd.DataFrame | None = None,
+    fva_chain_df: pd.DataFrame | None = None,
+    fva_per_fold_df: pd.DataFrame | None = None,
 ) -> dict[str, str]:
     out: dict[str, str] = {}
     if not headline.empty:
@@ -621,6 +775,47 @@ def _build_insights(
                     f"Strongest evidence: **{row}** beats **{col}** with p = "
                     f"{p:.4f} (paired bootstrap, 1000 resamples)."
                 )
+    if fva_star is not None and not fva_star.empty:
+        baseline = str(fva_star["baseline"].iloc[0])
+        metric = str(fva_star["metric"].iloc[0]).upper()
+        adders = fva_star[fva_star["fva_abs"] > 0]
+        destroyers = fva_star[fva_star["fva_abs"] < 0]
+        bits = []
+        if not adders.empty:
+            best = adders.iloc[0]
+            bits.append(
+                f"**{best['model']}** adds the most value vs {baseline} "
+                f"({metric} −{best['fva_abs']:.4f}, {best['fva_pct']:+.1%})"
+            )
+        if not destroyers.empty:
+            worst = destroyers.iloc[-1]
+            bits.append(
+                f"**{worst['model']}** destroys value (FVA = {worst['fva_abs']:+.4f}) — "
+                f"reconsider whether it's worth running"
+            )
+        if bits:
+            out["13_fva_star"] = "; ".join(bits) + "."
+    if fva_chain_df is not None and not fva_chain_df.empty and len(fva_chain_df) >= 2:
+        chain_steps = fva_chain_df["step"].tolist()
+        net = float(fva_chain_df.loc[1:, "fva_abs"].sum())
+        positive = (fva_chain_df.loc[1:, "fva_abs"] > 0).sum()
+        negative = (fva_chain_df.loc[1:, "fva_abs"] < 0).sum()
+        out["14_fva_waterfall"] = (
+            f"Chain {' → '.join(chain_steps)}: {positive} step(s) added value, "
+            f"{negative} destroyed it; **net FVA = {net:+.4f}**."
+        )
+    if fva_per_fold_df is not None and not fva_per_fold_df.empty:
+        consistency = (
+            fva_per_fold_df.groupby("model")["fva_abs"]
+            .apply(lambda s: float((s > 0).mean()))
+            .sort_values(ascending=False)
+        )
+        if len(consistency):
+            best = consistency.index[0]
+            out["15_fva_per_fold"] = (
+                f"Most consistently value-adding across folds: **{best}** "
+                f"({consistency.iloc[0]:.0%} of folds positive)."
+            )
     return out
 
 
@@ -638,6 +833,9 @@ def build_all_figures(
     cv_df: pd.DataFrame,
     train: pd.DataFrame,
     models: list[str],
+    fva_star: pd.DataFrame | None = None,
+    fva_chain_df: pd.DataFrame | None = None,
+    fva_per_fold_df: pd.DataFrame | None = None,
 ) -> FigureBundle:
     """Build every figure that has data; skip cleanly when an input is empty."""
     apply_style()
@@ -654,6 +852,12 @@ def build_all_figures(
         ("10_calibration", lambda: fig_calibration(residuals)),
         ("11_forecast_examples", lambda: fig_forecast_examples(cv_df, train, models)),
         ("12_lorenz", lambda: fig_lorenz(error_curves)),
+        ("13_fva_star", lambda: fig_fva_star(fva_star) if fva_star is not None else None),
+        ("14_fva_waterfall", lambda: fig_fva_waterfall(fva_chain_df) if fva_chain_df is not None else None),
+        (
+            "15_fva_per_fold",
+            lambda: fig_fva_per_fold(fva_per_fold_df) if fva_per_fold_df is not None else None,
+        ),
     ]
     figures: dict[str, Figure] = {}
     for name, fn in builders:
@@ -662,5 +866,15 @@ def build_all_figures(
             figures[name] = fig
 
     captions = {n: _DEFAULT_CAPTIONS.get(n, "") for n, _ in _FIGURE_ORDER}
-    insights = _build_insights(headline, per_fold, per_horizon, per_level, bv, pvalues)
+    insights = _build_insights(
+        headline,
+        per_fold,
+        per_horizon,
+        per_level,
+        bv,
+        pvalues,
+        fva_star=fva_star,
+        fva_chain_df=fva_chain_df,
+        fva_per_fold_df=fva_per_fold_df,
+    )
     return FigureBundle(figures=figures, captions=captions, insights=insights)

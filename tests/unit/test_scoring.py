@@ -10,6 +10,9 @@ from m5.scoring import (
     bias_variance_decomposition,
     discover_models,
     error_concentration,
+    fva_chain,
+    fva_per_fold,
+    fva_scores,
     headline_scores,
     paired_bootstrap_pvalues,
     per_fold_scores,
@@ -133,3 +136,60 @@ def test_residuals_long_has_one_row_per_model_per_obs(
     assert set(res["model"]) == {"Perfect", "Biased", "Naive"}
     assert (res.loc[res["model"] == "Perfect", "residual"] == 0).all()
     assert np.allclose(res.loc[res["model"] == "Biased", "residual"], 1.5)
+
+
+# ---------------------------------------------------------------------------
+# Forecast Value Added — Vandeput, 2021
+# ---------------------------------------------------------------------------
+def test_fva_perfect_beats_baseline(toy_cv: pd.DataFrame, toy_train_for_cv: pd.DataFrame) -> None:
+    inp = _make_inputs(toy_cv, toy_train_for_cv)
+    fva = fva_scores(inp, baseline="Biased", metric="mae")
+    # Baseline is excluded from the result; only Perfect and Naive remain.
+    assert set(fva["model"]) == {"Perfect", "Naive"}
+    perfect = fva[fva["model"] == "Perfect"].iloc[0]
+    assert perfect["fva_abs"] > 0
+    assert perfect["fva_pct"] > 0
+    # Bias is exactly 1.5 → MAE(Biased) = 1.5; Perfect MAE = 0 → FVA = 1.5.
+    assert perfect["fva_abs"] == pytest.approx(1.5, abs=1e-6)
+
+
+def test_fva_destroying_value_is_negative(toy_cv: pd.DataFrame, toy_train_for_cv: pd.DataFrame) -> None:
+    inp = _make_inputs(toy_cv, toy_train_for_cv)
+    fva = fva_scores(inp, baseline="Perfect", metric="mae")
+    biased = fva[fva["model"] == "Biased"].iloc[0]
+    assert biased["fva_abs"] < 0  # Biased destroys value vs Perfect
+
+
+def test_fva_baseline_must_exist(toy_cv: pd.DataFrame, toy_train_for_cv: pd.DataFrame) -> None:
+    inp = _make_inputs(toy_cv, toy_train_for_cv)
+    with pytest.raises(ValueError, match=r"not in inp\.models"):
+        fva_scores(inp, baseline="DoesNotExist")
+
+
+def test_fva_metric_validated(toy_cv: pd.DataFrame, toy_train_for_cv: pd.DataFrame) -> None:
+    inp = _make_inputs(toy_cv, toy_train_for_cv)
+    with pytest.raises(ValueError, match="Unknown FVA metric"):
+        fva_scores(inp, baseline="Biased", metric="bogus")
+
+
+def test_fva_chain_first_row_is_baseline(toy_cv: pd.DataFrame, toy_train_for_cv: pd.DataFrame) -> None:
+    inp = _make_inputs(toy_cv, toy_train_for_cv)
+    chain = fva_chain(inp, chain=["Naive", "Biased", "Perfect"], metric="mae")
+    assert len(chain) == 3
+    assert chain.iloc[0]["step"] == "Naive"
+    assert chain.iloc[0]["fva_abs"] == 0.0
+    assert chain.iloc[0]["is_baseline"]
+    # Perfect is the last step and has zero error → its FVA equals previous error.
+    assert chain.iloc[-1]["error_step"] == 0.0
+    assert chain.iloc[-1]["fva_abs"] > 0
+
+
+def test_fva_per_fold_one_row_per_model_per_cutoff(
+    toy_cv: pd.DataFrame, toy_train_for_cv: pd.DataFrame
+) -> None:
+    inp = _make_inputs(toy_cv, toy_train_for_cv)
+    pf = fva_per_fold(inp, baseline="Biased", metric="mae")
+    # 2 folds x 2 non-baseline models = 4 rows.
+    assert len(pf) == toy_cv["cutoff"].nunique() * 2
+    # Perfect adds value across every fold.
+    assert (pf.loc[pf["model"] == "Perfect", "fva_abs"] > 0).all()

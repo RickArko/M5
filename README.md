@@ -1,4 +1,4 @@
-# M5 Forecasting Accuracy — reproducible Nixtla solution
+# M5 Forecasting Solution
 
 [![CI](https://github.com/RickArko/M5/actions/workflows/ci.yml/badge.svg)](https://github.com/RickArko/M5/actions/workflows/ci.yml)
 
