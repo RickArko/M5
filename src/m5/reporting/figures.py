@@ -303,10 +303,15 @@ def fig_residual_histogram(residuals: pd.DataFrame) -> Figure | None:
     fig, axes = plt.subplots(n, 2, figsize=(9, 2.4 * n + 0.5), squeeze=False)
     for i, m in enumerate(models):
         r = residuals.loc[residuals["model"] == m, "residual"].dropna().to_numpy()
-        c = model_color(m)
+        c = model_color(str(m))
         ax_h, ax_q = axes[i]
         if r.size:
-            ax_h.hist(r, bins=60, color=c, alpha=0.85, edgecolor="white")
+            bins = min(60, max(10, int(np.sqrt(r.size))))
+            try:
+                ax_h.hist(r, bins=bins, color=c, alpha=0.85, edgecolor="white")
+            except ValueError:
+                # Constant or near-constant residuals — show a single bar.
+                ax_h.axvline(float(r[0]), color=c, linewidth=2)
         ax_h.axvline(0, color="black", linewidth=0.8)
         ax_h.set_title(f"{m} — residual distribution")
         ax_h.set_xlabel("residual")

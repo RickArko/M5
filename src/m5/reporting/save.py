@@ -56,7 +56,7 @@ _PDF_KEYS = frozenset(
 )
 
 
-def _metadata_for_format(meta: Mapping[str, str], fmt: str) -> dict[str, str]:
+def _metadata_for_format(meta: Mapping[str, str], fmt: str) -> dict[str, Any]:
     if fmt == "svg":
         dc = {k: v for k, v in meta.items() if k in _SVG_DC_KEYS}
         extras = {k: v for k, v in meta.items() if k not in _SVG_DC_KEYS}
@@ -66,13 +66,17 @@ def _metadata_for_format(meta: Mapping[str, str], fmt: str) -> dict[str, str]:
             dc["Description"] = (existing + " | " + packed).strip(" |") if existing else packed
         return dc
     if fmt == "pdf":
-        translated = dict(meta)
+        translated: dict[str, Any] = dict(meta)
         if "Date" in translated and "CreationDate" not in translated:
-            translated["CreationDate"] = translated.pop("Date")
+            raw = translated.pop("Date")
+            try:
+                translated["CreationDate"] = _dt.datetime.fromisoformat(raw)
+            except (TypeError, ValueError):
+                translated["CreationDate"] = _dt.datetime.now(_dt.UTC)
         kept = {k: v for k, v in translated.items() if k in _PDF_KEYS}
         extras = {k: v for k, v in translated.items() if k not in _PDF_KEYS}
         if extras:
-            existing = kept.get("Subject", "").strip()
+            existing = kept.get("Subject", "").strip() if isinstance(kept.get("Subject"), str) else ""
             packed = "; ".join(f"{k}={v}" for k, v in extras.items())
             kept["Subject"] = (existing + " | " + packed).strip(" |") if existing else packed
         return kept
