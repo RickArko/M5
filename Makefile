@@ -187,3 +187,7 @@ clean: ## Remove build artifacts and caches
 
 clean-all: clean ## Also remove .venv, processed data, and forecasts
 	rm -rf .venv data/processed forecasts artifacts
+
+# ---- Cloud (multi-provider train + serve via Terraform) ------------
+
+include cloud/Makefile.cloud
