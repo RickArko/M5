@@ -1,0 +1,17 @@
+[Unit]
+Description=M5 oneshot training run (cloud-init/train.sh)
+Documentation=https://github.com/RickArko/M5/tree/main/cloud
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/m5-cloud.env
+ExecStart=/srv/M5/cloud/cloud-init/train.sh
+StandardOutput=journal
+StandardError=journal
+# Train can take a while on the full dataset — give it 4h headroom.
+TimeoutStartSec=14400
+
+[Install]
+WantedBy=multi-user.target
