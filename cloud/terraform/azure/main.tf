@@ -209,7 +209,7 @@ resource "azurerm_linux_virtual_machine" "train" {
   network_interface_ids = [azurerm_network_interface.train[0].id]
   custom_data           = local.user_data_train
   identity { type = "SystemAssigned" }
-  tags                  = { project = "m5", role = "train" }
+  tags = { project = "m5", role = "train" }
 
   admin_ssh_key {
     username   = var.admin_username
@@ -240,7 +240,7 @@ resource "azurerm_linux_virtual_machine" "serve" {
   network_interface_ids = [azurerm_network_interface.serve[0].id]
   custom_data           = local.user_data_serve
   identity { type = "SystemAssigned" }
-  tags                  = { project = "m5", role = "serve" }
+  tags = { project = "m5", role = "serve" }
 
   admin_ssh_key {
     username   = var.admin_username

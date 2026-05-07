@@ -9,7 +9,9 @@
 #      reboots re-run serve.sh idempotently.
 #   5. Hand off to the role-specific bootstrap script.
 #
-# Variables interpolated by Terraform are written ${VAR}; literal shell uses $$VAR.
+# Variables interpolated by Terraform use $${VAR} syntax in this template;
+# the rendered output is plain bash (Terraform escapes $${...} sequences only,
+# bare $ is passed through unchanged).
 
 set -euo pipefail
 exec > >(tee -a /var/log/m5-userdata.log) 2>&1
@@ -45,11 +47,10 @@ cd /srv/M5
 git fetch --all --tags --prune
 git checkout "${git_ref}"
 
-ROLE='${role}'
-if [ "$$ROLE" = "serve" ]; then
-    install -m 644 cloud/systemd/m5-bootstrap.service /etc/systemd/system/m5-bootstrap.service
-    systemctl daemon-reload
-    systemctl enable m5-bootstrap.service
-fi
+%{ if role == "serve" ~}
+install -m 644 cloud/systemd/m5-bootstrap.service /etc/systemd/system/m5-bootstrap.service
+systemctl daemon-reload
+systemctl enable m5-bootstrap.service
+%{ endif ~}
 
-exec bash "cloud/cloud-init/$$ROLE.sh"
+exec bash "cloud/cloud-init/${role}.sh"

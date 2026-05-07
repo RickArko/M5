@@ -142,7 +142,7 @@ resource "aws_iam_role" "vm" {
 
 data "aws_iam_policy_document" "vm" {
   statement {
-    actions = ["s3:ListBucket"]
+    actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.artifact.arn]
   }
   statement {
@@ -214,14 +214,14 @@ locals {
 # Train EC2 instance
 # ----------------------------------------------------------------------------
 resource "aws_instance" "train" {
-  count                  = var.create_train ? 1 : 0
-  ami                    = data.aws_ami.ubuntu_2404.id
-  instance_type          = var.train_instance_type
-  key_name               = aws_key_pair.m5.key_name
-  subnet_id              = local.subnet_id
-  vpc_security_group_ids = [aws_security_group.train.id]
-  iam_instance_profile   = aws_iam_instance_profile.vm.name
-  user_data              = local.user_data_train
+  count                       = var.create_train ? 1 : 0
+  ami                         = data.aws_ami.ubuntu_2404.id
+  instance_type               = var.train_instance_type
+  key_name                    = aws_key_pair.m5.key_name
+  subnet_id                   = local.subnet_id
+  vpc_security_group_ids      = [aws_security_group.train.id]
+  iam_instance_profile        = aws_iam_instance_profile.vm.name
+  user_data                   = local.user_data_train
   user_data_replace_on_change = true
 
   root_block_device {
@@ -243,14 +243,14 @@ resource "aws_instance" "train" {
 # Serve EC2 instance
 # ----------------------------------------------------------------------------
 resource "aws_instance" "serve" {
-  count                  = var.create_serve ? 1 : 0
-  ami                    = data.aws_ami.ubuntu_2404.id
-  instance_type          = var.serve_instance_type
-  key_name               = aws_key_pair.m5.key_name
-  subnet_id              = local.subnet_id
-  vpc_security_group_ids = [aws_security_group.serve.id]
-  iam_instance_profile   = aws_iam_instance_profile.vm.name
-  user_data              = local.user_data_serve
+  count                       = var.create_serve ? 1 : 0
+  ami                         = data.aws_ami.ubuntu_2404.id
+  instance_type               = var.serve_instance_type
+  key_name                    = aws_key_pair.m5.key_name
+  subnet_id                   = local.subnet_id
+  vpc_security_group_ids      = [aws_security_group.serve.id]
+  iam_instance_profile        = aws_iam_instance_profile.vm.name
+  user_data                   = local.user_data_serve
   user_data_replace_on_change = true
 
   root_block_device {

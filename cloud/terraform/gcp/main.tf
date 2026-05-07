@@ -41,7 +41,7 @@ resource "google_compute_firewall" "serve" {
 # Service account for the VMs (read/write the artifact bucket)
 # ----------------------------------------------------------------------------
 resource "google_service_account" "vm" {
-  account_id   = "m5-vm"
+  account_id   = "m5-vm-sa"
   display_name = "M5 VM service account"
 }
 
