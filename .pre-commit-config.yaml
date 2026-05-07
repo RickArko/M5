@@ -40,3 +40,14 @@ repos:
         pass_filenames: false
         files: ^src/m5/
         stages: [pre-push]
+
+      # Local-only guard — refuses `git push` while on the `ai` branch.
+      # Bypass once: M5_ALLOW_AI_PUSH=1 git push
+      # Remove guard: delete this hook block when `ai` is ready to merge.
+      - id: block-ai-branch-push
+        name: block remote pushes from ai branch (local-only)
+        entry: scripts/block-ai-push.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
