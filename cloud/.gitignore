@@ -1,0 +1,10 @@
+# Per-user / per-machine Terraform working state
+terraform/*/terraform.tfvars
+terraform/*/.terraform/
+terraform/*/.terraform.lock.hcl
+terraform/*/terraform.tfstate
+terraform/*/terraform.tfstate.backup
+terraform/*/*.tfplan
+
+# Local testing scratch
+*.local.tfvars

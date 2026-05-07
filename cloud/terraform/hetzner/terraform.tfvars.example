@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+# ---- Hetzner API token --------------------------------------------------
+# Project → Security → API Tokens (Read & Write). Or set HCLOUD_TOKEN env.
+# hcloud_token = "..."
+
+# ---- SSH ---------------------------------------------------------------
+ssh_public_key = "ssh-ed25519 AAAA... your-comment"
+
+# ---- Pre-created Hetzner Object Storage --------------------------------
+# Hetzner Object Storage (S3-compatible) — bucket created in the console first.
+artifact_uri          = "s3://m5-artifacts/lgbm"
+object_store_endpoint = "https://fsn1.your-objectstorage.com"
+aws_access_key_id     = "HCO-..."
+aws_secret_access_key = "..."
+
+# ---- Optional: tighten firewall to just your IP -----------------------
+# allowed_ssh_cidrs   = ["203.0.113.42/32"]
+# allowed_serve_cidrs = ["203.0.113.42/32"]
+
+# ---- Optional: disable the train VM (serve only) ----------------------
+# create_train = false
+# create_serve = true
+
+# ---- Optional: serve-side API key -------------------------------------
+# serve_api_key = "long-random-string"
