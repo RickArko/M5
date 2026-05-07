@@ -2,8 +2,17 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
-from m5.evaluation import compute_components, wrmsse, wrmsse_for_models
+from m5.evaluation import (
+    M5_FORECAST_END_DAY,
+    M5_FORECAST_START_DAY,
+    M5_HORIZON,
+    compute_components,
+    make_submission,
+    wrmsse,
+    wrmsse_for_models,
+)
 
 
 def _split(df: pd.DataFrame, h: int = 14) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -44,3 +53,44 @@ def test_wrmsse_for_models_ranks_better_lower(toy_long: pd.DataFrame) -> None:
     scores = wrmsse_for_models(holdout, fc, comp, model_cols=["Perfect", "Bad"])
     assert scores["Perfect"] < scores["Bad"]
     assert scores["Perfect"] == 0.0
+
+
+def _toy_preds(h: int = 14, n_series: int = 3) -> pd.DataFrame:
+    """Simple long forecast frame: ``n_series`` × ``h`` days × one ``y_hat`` column."""
+    series = [f"FOODS_1_{i:03d}_CA_1" for i in range(1, n_series + 1)]
+    dates = pd.date_range("2025-01-01", periods=h, freq="D")
+    rows = [(s, d, float(i)) for s in series for i, d in enumerate(dates)]
+    return pd.DataFrame(rows, columns=["unique_id", "ds", "y_hat"])
+
+
+def test_make_submission_kaggle_layout_columns_and_shape() -> None:
+    preds = _toy_preds(h=14, n_series=3)
+    sub = make_submission(preds, h=14)
+    assert list(sub.columns) == [f"F{i + 1}" for i in range(14)]
+    assert sub.shape == (3, 14)
+    assert sub.index.name == "unique_id"
+
+
+def test_make_submission_d_index_layout() -> None:
+    preds = _toy_preds(h=M5_HORIZON, n_series=2)
+    sub = make_submission(preds, layout="d_index")
+    assert sub.columns[0] == f"d_{M5_FORECAST_START_DAY}"
+    assert sub.columns[-1] == f"d_{M5_FORECAST_END_DAY}"
+
+
+def test_make_submission_infers_value_col_when_unique() -> None:
+    preds = _toy_preds(h=7, n_series=1).rename(columns={"y_hat": "LGBM"})
+    sub = make_submission(preds, h=7)
+    np.testing.assert_array_equal(sub.iloc[0].to_numpy(), np.arange(7, dtype=float))
+
+
+def test_make_submission_requires_explicit_value_col_when_ambiguous() -> None:
+    preds = _toy_preds(h=7).assign(other=0.0)
+    with pytest.raises(ValueError, match="value_col"):
+        make_submission(preds, h=7)
+
+
+def test_make_submission_rejects_unknown_layout() -> None:
+    preds = _toy_preds(h=7)
+    with pytest.raises(ValueError, match="Unknown layout"):
+        make_submission(preds, h=7, layout="weird")  # type: ignore[arg-type]

@@ -1,14 +1,15 @@
-"""Typer CLI: ``m5 download | prep | cv | forecast | score``."""
+"""Typer CLI: ``m5 download | prep | cv | forecast | train | serve | score``."""
 
 from __future__ import annotations
 
 import time
+from datetime import UTC
 from pathlib import Path
 
 import pandas as pd
 import typer
 
-from m5.config import SETTINGS, set_global_seed
+from m5.config import REPO_ROOT, SETTINGS, set_global_seed
 from m5.logging import logger
 
 app = typer.Typer(add_completion=False, help="M5 forecasting toolkit.")
@@ -161,6 +162,169 @@ def cv_recipe(
     out.parent.mkdir(parents=True, exist_ok=True)
     cv_df.to_parquet(out, index=False)
     logger.info(f"Wrote {out}")
+
+
+@app.command()
+def train(
+    horizon: int = typer.Option(
+        SETTINGS.horizon,
+        help="Horizon recorded in metadata. Inference can request any h up to M5_SERVE_MAX_HORIZON.",
+    ),
+    long_path: Path = typer.Option(
+        None, help="Path to processed long parquet (default: data/processed/long.parquet)."
+    ),
+    out_dir: Path = typer.Option(
+        None,
+        help="Where to write the artifact. Default: artifacts/models/lgbm/<UTC-timestamp>/ "
+        "(also updates artifacts/models/lgbm/latest symlink).",
+    ),
+    history_buffer_days: int = typer.Option(
+        120,
+        help="History tail (per series) bundled into the artifact for stateful inference.",
+    ),
+) -> None:
+    """Fit the LightGBM model and persist a serving artifact.
+
+    Writes ``model.joblib`` + ``metadata.json`` + ``history.parquet`` + ``statics.parquet``
+    into a per-run directory. The FastAPI service (``python -m m5.serve``) loads from
+    ``M5_SERVE_MODEL_DIR`` (defaults to the ``latest`` symlink updated by this command).
+    """
+    import json
+    import subprocess
+    from datetime import datetime
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
+
+    import joblib
+
+    from m5.models.lgbm import DEFAULT_LAGS, DEFAULT_ROLLS, fit_lgbm
+
+    set_global_seed()
+    SETTINGS.ensure_dirs()
+
+    long_path = long_path or SETTINGS.processed_dir / "long.parquet"
+    if not long_path.exists():
+        raise typer.BadParameter(f"Long-frame not found at {long_path} — run `m5 prep` first.")
+
+    logger.info(f"train: loading {long_path}")
+    df = pd.read_parquet(long_path)
+    df["ds"] = pd.to_datetime(df["ds"])
+    n_rows = len(df)
+    n_series = int(df["unique_id"].nunique())
+    training_cutoff = df["ds"].max()
+    logger.info(f"train: {n_rows:,d} rows × {n_series:,d} series, cutoff={training_cutoff.date()}")
+
+    fcst = fit_lgbm(df)
+
+    # Decide artifact directory.
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base_dir = SETTINGS.artifacts_dir / "models" / "lgbm"
+    run_dir = out_dir if out_dir is not None else (base_dir / ts)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1) Model.
+    model_path = run_dir / "model.joblib"
+    joblib.dump(fcst, model_path, compress=3)
+    logger.info(f"train: wrote {model_path}")
+
+    # 2) Trailing history per series (for stateful inference).
+    max_lag = max(DEFAULT_LAGS) if DEFAULT_LAGS else 0
+    max_roll = max(DEFAULT_ROLLS) if DEFAULT_ROLLS else 0
+    needed_days = max(max_lag + max_roll, history_buffer_days)
+    cutoff = training_cutoff - pd.Timedelta(days=needed_days)
+    history = (
+        df[df["ds"] >= cutoff][["unique_id", "ds", "y"]]
+        .sort_values(["unique_id", "ds"])
+        .reset_index(drop=True)
+    )
+    history.to_parquet(run_dir / "history.parquet", index=False)
+    logger.info(f"train: wrote history.parquet ({len(history):,d} rows, last {needed_days} days)")
+
+    # 3) Static features per series.
+    static_cols = ["unique_id"] + [
+        c for c in ("item_id", "dept_id", "cat_id", "store_id", "state_id") if c in df.columns
+    ]
+    statics = df.drop_duplicates("unique_id")[static_cols].reset_index(drop=True)
+    statics.to_parquet(run_dir / "statics.parquet", index=False)
+    logger.info(f"train: wrote statics.parquet ({len(statics):,d} series)")
+
+    # 4) Metadata.
+    def _safe_version(pkg: str) -> str:
+        try:
+            return _pkg_version(pkg)
+        except PackageNotFoundError:
+            return "unknown"
+
+    try:
+        git_sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(REPO_ROOT),
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        git_sha = "unknown"
+
+    metadata = {
+        "model_kind": "lgbm",
+        "framework": "mlforecast",
+        "framework_version": _safe_version("mlforecast"),
+        "lightgbm_version": _safe_version("lightgbm"),
+        "trained_at": ts,
+        "git_sha": git_sha,
+        "training_cutoff": training_cutoff.strftime("%Y-%m-%d"),
+        "freq": "D",
+        "horizon_default": int(horizon),
+        "lags": list(DEFAULT_LAGS),
+        "rolling_windows": list(DEFAULT_ROLLS),
+        "n_series": n_series,
+        "n_rows": int(n_rows),
+        # Lower bound for stateless predict — clients must send at least this many rows
+        # per series. mlforecast needs the full lag window to compute features.
+        "min_history_required": int(max(max_lag + max_roll - 1, max_lag)),
+        "static_features": [c for c in static_cols if c != "unique_id"],
+        "seed": SETTINGS.seed,
+    }
+    (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    logger.info("train: wrote metadata.json")
+
+    # 5) Update `latest` symlink — only when writing to the default location.
+    if out_dir is None:
+        latest = base_dir / "latest"
+        if latest.is_symlink() or latest.exists():
+            latest.unlink()
+        latest.symlink_to(ts)  # relative target — survives if base_dir is moved
+        logger.info(f"train: latest -> {ts}")
+
+    logger.info(f"train: artifact ready at {run_dir}")
+
+
+@app.command()
+def serve(
+    host: str = typer.Option(None, help="Bind host. Default: M5_SERVE_HOST or 0.0.0.0."),
+    port: int = typer.Option(None, help="Bind port. Default: M5_SERVE_PORT or 8000."),
+    reload: bool = typer.Option(False, "--reload", help="Hot-reload on code changes (dev only)."),
+    workers: int = typer.Option(None, help="Uvicorn worker count. Ignored when --reload is set."),
+) -> None:
+    """Run the FastAPI prediction service (uvicorn).
+
+    Loads the model artifact pointed to by ``M5_SERVE_MODEL_DIR`` (default:
+    ``artifacts/models/lgbm/latest``). Run ``m5 train`` first to produce one.
+    """
+    import uvicorn
+
+    from m5.serve.config import ServeSettings
+
+    s = ServeSettings()
+    uvicorn.run(
+        "m5.serve.app:create_app",
+        factory=True,
+        host=host or s.host,
+        port=port or s.port,
+        reload=reload,
+        workers=(workers or s.workers) if not reload else 1,
+        log_config=None,
+    )
 
 
 @app.command()

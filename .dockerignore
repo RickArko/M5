@@ -1,0 +1,18 @@
+# Whitelist approach — only ship what the Dockerfile needs to build the wheel
+# and a runtime venv. Everything else is excluded by the leading `**`.
+**
+
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src
+!src/**
+
+# Defensive re-excludes (in case any of the whitelisted paths contain noise)
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.ipynb_checkpoints

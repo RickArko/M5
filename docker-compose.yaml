@@ -1,0 +1,34 @@
+services:
+  m5-forecaster:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: m5-forecaster:local
+    container_name: m5-forecaster
+    restart: unless-stopped
+    ports:
+      - "${M5_SERVE_PORT:-8000}:8000"
+    environment:
+      M5_SERVE_LOG_JSON: "true"
+      M5_SERVE_MODEL_DIR: /srv/model
+      M5_SERVE_API_KEY: "${M5_SERVE_API_KEY:-}"
+      M5_SERVE_MAX_HORIZON: "${M5_SERVE_MAX_HORIZON:-56}"
+      M5_SERVE_MAX_SERIES_PER_REQUEST: "${M5_SERVE_MAX_SERIES_PER_REQUEST:-5000}"
+      M5_SERVE_MAX_HISTORY_POINTS: "${M5_SERVE_MAX_HISTORY_POINTS:-2000000}"
+      M5_SERVE_SERVICE_NAME: "${M5_SERVE_SERVICE_NAME:-m5-forecaster}"
+    volumes:
+      # Mount the latest trained artifact read-only into the container.
+      # Re-run `make train` on the host and `docker compose restart` to pick up a new model.
+      - ./artifacts/models/lgbm/latest:/srv/model:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          # Tune for your hardware. mlforecast.predict is CPU-bound and largely single-threaded.
+          cpus: "2"
+          memory: "2G"

@@ -168,6 +168,113 @@ verifies it installs + imports + runs the CLI in a clean venv.
 A tag-triggered `release.yml` is wired for PyPI publishing via Trusted
 Publishers — see the comments at the top of that workflow to enable it.
 
+## Serving the model (FastAPI)
+
+A production-shaped FastAPI service ships in `src/m5/serve/`. It loads a single
+trained MLForecast artifact at startup, exposes stateless and stateful predict
+endpoints, and emits Prometheus metrics + structured JSON logs.
+
+```bash
+make prep             # → data/processed/long.parquet  (skip if already done)
+make train            # → artifacts/models/lgbm/<ts>/  (+ updates `latest` symlink)
+make serve            # uvicorn --reload on http://localhost:8000
+# or for a prod-style run (no reload, JSON logs):
+make serve-prod
+```
+
+Open <http://localhost:8000/docs> for the Swagger UI.
+
+### Artifact contract (`m5 train` writes)
+
+| File | Purpose |
+|---|---|
+| `model.joblib` | Fitted `MLForecast` (joblib-pickled, includes the LightGBM Booster) |
+| `metadata.json` | Framework versions, training cutoff, lags, features, git SHA, seed |
+| `history.parquet` | Trailing per-series history — used by stateful predict |
+| `statics.parquet` | One row per series with item / dept / cat / store / state |
+
+### Endpoints
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
+| `GET`  | `/` | Service identity (name + version) | no |
+| `GET`  | `/healthz` | Liveness probe | no |
+| `GET`  | `/readyz` | Readiness probe (200 only when model is loaded) | no |
+| `GET`  | `/metrics` | Prometheus exposition | no |
+| `GET`  | `/v1/model` | Trained-model metadata | optional |
+| `POST` | `/v1/predict` | **Stateless** — caller sends recent history per series | optional |
+| `POST` | `/v1/predict/by-id` | **Stateful** — caller sends only `unique_ids` + horizon | optional |
+
+When `M5_SERVE_API_KEY` is set, secured routes require `X-API-Key: <key>`.
+
+### Request shapes
+
+Stateful (`POST /v1/predict/by-id`):
+
+```bash
+curl -s http://localhost:8000/v1/predict/by-id \
+    -H "Content-Type: application/json" \
+    -d '{"horizon": 7, "unique_ids": ["FOODS_3_001_CA_1", "FOODS_3_001_CA_2"]}'
+```
+
+Stateless (`POST /v1/predict`) — caller must supply ≥ `min_history_required` rows per series
+(see `GET /v1/model`):
+
+```bash
+curl -s http://localhost:8000/v1/predict \
+    -H "Content-Type: application/json" \
+    -d '{
+          "horizon": 7,
+          "history": [
+            {"unique_id": "FOODS_3_001_CA_1", "ds": "2016-04-01", "y": 3.0},
+            {"unique_id": "FOODS_3_001_CA_1", "ds": "2016-04-02", "y": 4.0}
+          ]
+        }'
+```
+
+### Docker
+
+```bash
+make train            # produce the artifact on the host first
+make docker-build     # → m5-forecaster:local (multi-stage uv build, non-root)
+make docker-up        # docker compose up — mounts artifacts/models/lgbm/latest read-only
+make docker-logs      # tail container logs
+make docker-down
+```
+
+The image is multi-stage: `uv build` produces a wheel, a second stage installs
+it into a clean venv from the locked dep set, and the runtime image is `python:3.12-slim`
+with only `libgomp1`, `ca-certificates`, and `curl` (for `HEALTHCHECK`). Runs as
+uid 1001 (`app`); the model mounts at `/srv/model`.
+
+### Configuration (env vars)
+
+All flags are exposed as `M5_SERVE_*` env vars (see `.env.example`):
+
+| Var | Default | Purpose |
+|---|---|---|
+| `M5_SERVE_MODEL_DIR` | `artifacts/models/lgbm/latest` | Where the artifact lives |
+| `M5_SERVE_HOST` / `_PORT` | `0.0.0.0` / `8000` | Bind address |
+| `M5_SERVE_WORKERS` | `1` | Uvicorn worker count |
+| `M5_SERVE_MAX_HORIZON` | `56` | Reject larger horizons at the route |
+| `M5_SERVE_MAX_SERIES_PER_REQUEST` | `5000` | Defensive cap |
+| `M5_SERVE_MAX_HISTORY_POINTS` | `2_000_000` | Defensive cap on stateless payload size |
+| `M5_SERVE_API_KEY` | _(empty)_ | Set to require `X-API-Key`; empty = open (dev only) |
+| `M5_SERVE_LOG_JSON` | `false` | One JSON record per log line via loguru `serialize=True` |
+
+### Production notes
+
+- **Concurrency.** mlforecast.predict is CPU-bound and serialised by an internal
+  lock; scale with multiple uvicorn workers (one per CPU), not threads. Each
+  worker holds its own copy of the model in memory.
+- **Cold-start.** New `unique_id`s aren't supported in v1 — they need static
+  features the model was fit with. Cold-start is a v2 feature.
+- **Auth.** The `X-API-Key` middleware is intentionally minimal. For real prod,
+  put the service behind a gateway (Cloud Run / API Gateway / Envoy) and let
+  that handle OAuth / mTLS / rate limiting.
+- **Updating the model.** Re-run `make train`, then `docker compose restart`
+  (or roll your replicas) — the lifespan reloads from `M5_SERVE_MODEL_DIR`.
+
 ## Project layout
 
 ```
@@ -189,10 +296,21 @@ M5/
 │   ├── cv.py                   # reproducible rolling-origin CV (stats / lgbm / hier)
 │   ├── cli.py                  # Typer CLI (`m5 …`)
 │   ├── plots.py                # matplotlib helpers
-│   └── models/
-│       ├── stats.py            # Theta + AutoETS + SeasonalNaive
-│       ├── lgbm.py             # LightGBM via mlforecast
-│       └── hierarchical.py     # Theta base + BU/TD/MinT reconcilers
+│   ├── models/
+│   │   ├── stats.py            # Theta + AutoETS + SeasonalNaive
+│   │   ├── lgbm.py             # LightGBM via mlforecast
+│   │   └── hierarchical.py     # Theta base + BU/TD/MinT reconcilers
+│   └── serve/                  # FastAPI service (see "Serving the model")
+│       ├── app.py              # create_app() + lifespan model loader
+│       ├── config.py           # ServeSettings (M5_SERVE_*)
+│       ├── state.py            # ModelHandle — owns the artifact
+│       ├── schemas.py          # Pydantic v2 request/response
+│       ├── observability.py    # request id, JSON logs, Prometheus
+│       ├── auth.py             # optional X-API-Key
+│       ├── errors.py           # RFC 7807 problem details
+│       └── routes/             # health, metadata, predict
+├── Dockerfile                  # multi-stage uv build, non-root runtime
+├── docker-compose.yaml         # mounts artifacts/models/lgbm/latest read-only
 ├── notebooks/                  # 00_run_pipeline + the original EDA suite
 ├── tests/                      # pytest unit + smoke tests
 ├── plots/                      # static images from the original analysis

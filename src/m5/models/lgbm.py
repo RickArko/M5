@@ -90,6 +90,41 @@ def build_lgbm_forecaster(
     return build_lgbm_from_recipe(recipe, seed=seed, n_jobs=n_jobs)
 
 
+def fit_lgbm(
+    df: pd.DataFrame,
+    *,
+    static_cols: tuple[str, ...] = ("item_id", "dept_id", "cat_id", "store_id", "state_id"),
+    use_dynamic_features: bool = False,
+) -> MLForecast:
+    """Fit LightGBM on a long-frame and return the fitted MLForecast.
+
+    Mirrors the train half of :func:`fit_predict_lgbm` without predicting —
+    use this when you need to persist the trained model (e.g. ``m5 train``
+    for the FastAPI service) instead of consuming predictions inline.
+
+    The returned MLForecast carries enough state (training tail per series +
+    LightGBM Booster) for ``.predict(h)`` and ``.predict(h, new_df=...)``
+    to work directly against it.
+    """
+    n_rows, n_series = len(df), df["unique_id"].nunique()
+    logger.info(f"fit_lgbm: features → {n_series:,d} series × {n_rows // max(n_series, 1):,d} rows each")
+    t0 = time.time()
+    df = build_feature_frame(df.copy())
+    statics_present = [c for c in static_cols if c in df.columns]
+    df = encode_static_categoricals(df, statics_present)
+
+    dynamic_cols: list[str] = []
+    if use_dynamic_features:
+        dynamic_cols = [c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns]
+
+    keep_cols = ["unique_id", "ds", "y", *statics_present, *dynamic_cols]
+    fcst = build_lgbm_forecaster()
+    logger.info(f"fit_lgbm: fitting LightGBM (dynamic={len(dynamic_cols)} cols)")
+    fcst.fit(df[keep_cols], static_features=statics_present)
+    logger.info(f"fit_lgbm: fit done in {time.time() - t0:.1f}s")
+    return fcst
+
+
 def fit_predict_lgbm(
     df: pd.DataFrame,
     *,
@@ -103,24 +138,9 @@ def fit_predict_lgbm(
     features are used; otherwise the model is trained on lags + date features
     + static categoricals only, so ``.predict(h)`` works without a future frame.
     """
-    n_rows, n_series = len(df), df["unique_id"].nunique()
-    logger.info(
-        f"fit_predict_lgbm: features → {n_series:,d} series × {n_rows // max(n_series, 1):,d} rows each"
-    )
     t0 = time.time()
-    df = build_feature_frame(df.copy())
-    statics_present = [c for c in static_cols if c in df.columns]
-    df = encode_static_categoricals(df, statics_present)
-
-    dynamic_cols: list[str] = []
-    if X_df is not None:
-        dynamic_cols = [c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns]
-
-    keep_cols = ["unique_id", "ds", "y", *statics_present, *dynamic_cols]
-    fcst = build_lgbm_forecaster()
-    logger.info(f"fit_predict_lgbm: fitting LightGBM (h={horizon}, dynamic={len(dynamic_cols)} cols)")
-    fcst.fit(df[keep_cols], static_features=statics_present)
-    logger.info(f"fit_predict_lgbm: fit done in {time.time() - t0:.1f}s — predicting")
+    fcst = fit_lgbm(df, static_cols=static_cols, use_dynamic_features=X_df is not None)
+    logger.info(f"fit_predict_lgbm: predicting (h={horizon})")
     out = fcst.predict(h=horizon, X_df=X_df) if X_df is not None else fcst.predict(h=horizon)
     logger.info(f"fit_predict_lgbm: total {time.time() - t0:.1f}s, {len(out):,d} forecast rows")
     return out
