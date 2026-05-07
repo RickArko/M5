@@ -208,6 +208,8 @@ def per_level_scores(inp: ScoringInputs) -> pd.DataFrame:
     )
 
     def _join_keys(df: pd.DataFrame, cols: list[str]) -> pd.Series:
+        # ``df[[c]].agg("/".join, axis=1)`` returns a DataFrame on single-key
+        # specs, so build the key series explicitly from normalized Series views.
         parts: list[pd.Series] = []
         for c in cols:
             col = df[c]

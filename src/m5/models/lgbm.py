@@ -138,6 +138,10 @@ def fit_predict_lgbm(
     features are used; otherwise the model is trained on lags + date features
     + static categoricals only, so ``.predict(h)`` works without a future frame.
     """
+    n_rows, n_series = len(df), df["unique_id"].nunique()
+    logger.info(
+        f"fit_predict_lgbm: features → {n_series:,d} series × {n_rows // max(n_series, 1):,d} rows each"
+    )
     t0 = time.time()
     fcst = fit_lgbm(df, static_cols=static_cols, use_dynamic_features=X_df is not None)
     logger.info(f"fit_predict_lgbm: predicting (h={horizon})")
