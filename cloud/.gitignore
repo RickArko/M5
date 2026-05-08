@@ -1,7 +1,8 @@
 # Per-user / per-machine Terraform working state
+# Note: .terraform.lock.hcl is intentionally NOT ignored — pin provider versions
+# for reproducible installs across machines (Terraform best practice).
 terraform/*/terraform.tfvars
 terraform/*/.terraform/
-terraform/*/.terraform.lock.hcl
 terraform/*/terraform.tfstate
 terraform/*/terraform.tfstate.backup
 terraform/*/*.tfplan

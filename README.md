@@ -350,7 +350,26 @@ Full list: [`docs/developer/TROUBLESHOOTING.md`](docs/developer/TROUBLESHOOTING.
 - [`docs/developer/SETUP.md`](docs/developer/SETUP.md) — first-time install (WSL, uv, VSCode).
 - [`docs/developer/DEVELOPMENT.md`](docs/developer/DEVELOPMENT.md) — daily workflow, testing, debugging.
 - [`docs/developer/ARCHITECTURE.md`](docs/developer/ARCHITECTURE.md) — why this stack, package layout, data flow.
+- [`docs/developer/AGENTS.md`](docs/developer/AGENTS.md) — extensive guide for programmers driving an AI coding agent (Claude Code, Codex CLI, Gemini CLI, Aider, …).
 - [`docs/developer/TROUBLESHOOTING.md`](docs/developer/TROUBLESHOOTING.md) — common errors.
+
+### Working with AI coding agents
+
+The repo follows the [agents.md](https://agents.md) convention so any
+modern agentic CLI gets a useful system prompt for free:
+
+| File | Used by |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | OpenAI Codex CLI, opencode, factory.ai droids (auto). Aider via `--read AGENTS.md`. |
+| [`CLAUDE.md`](CLAUDE.md) | Claude Code (auto). |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI (auto). |
+| [`.cursorrules`](.cursorrules) | Cursor (auto, prepended to chat). |
+| [`.aider.conf.yml`](.aider.conf.yml) | Aider (auto, preloads `AGENTS.md` + `AI-CONTEXT.md`). |
+| [`AI-CONTEXT.md`](AI-CONTEXT.md) | Drop into any agent's context for token-optimized full repo summary. |
+
+Per-harness setup, the standard agent workflow loop, capped CV recipes,
+and PR conventions live in
+[`docs/developer/AGENTS.md`](docs/developer/AGENTS.md).
 
 ## Approach
 

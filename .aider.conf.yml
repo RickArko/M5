@@ -1,0 +1,30 @@
+# Aider config for the M5 repo.
+# Auto-loaded when aider runs from the repo root.
+# Docs: https://aider.chat/docs/config/aider_conf.html
+#
+# Override per-session with `aider --no-conf` or extra `--read` flags.
+
+# Project context — read into every session as read-only reference.
+# AGENTS.md is the canonical agent contract; AI-CONTEXT.md is the
+# token-optimized full repo summary; the developer/AGENTS.md guide
+# covers per-harness setup, workflow, and PR conventions.
+read:
+  - AGENTS.md
+  - AI-CONTEXT.md
+  - docs/developer/AGENTS.md
+
+# Run the fast test tier after each edit (~5 s on toy fixtures).
+# Switch to `make check` for the full lint + typecheck + test gate.
+auto-test: true
+test-cmd: make test-fast
+
+# Lint Python with the project's ruff config (matches `make fmt`).
+lint-cmd:
+  python: uv run ruff check --fix
+
+# Don't auto-commit. The repo's convention is explicit, reviewable
+# commits with pre-commit hooks running on each one.
+auto-commits: false
+
+# Respect .gitignore — don't crawl data/, .venv/, artifacts/, etc.
+gitignore: true
