@@ -8,6 +8,16 @@ Goal: get close to world-class with as few features as possible — three model
 families (Theta, AutoETS, LightGBM) on a deliberately small feature menu, with
 reproducible rolling-origin cross-validation.
 
+![M5 pipeline — fit, predict, score (animated SVG)](assets/pipeline.svg)
+
+> Regenerate with `make viz` (after `make train`) — reads
+> `artifacts/models/lgbm/latest/`, picks a hero series, runs rolling-origin
+> predictions, and writes [`assets/pipeline.svg`](assets/pipeline.svg) (the
+> animation above, SMIL-animated, no JS) plus
+> [`assets/pipeline.html`](assets/pipeline.html), an interactive D3.js page
+> where you can scrub through CV windows and hover for per-day
+> truth / forecast / baseline values.
+
 ## Stack
 
 - **Python 3.12**, dependency-managed by [`uv`](https://docs.astral.sh/uv/)

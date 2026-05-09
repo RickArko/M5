@@ -567,6 +567,41 @@ def score(
     logger.info(f"score: wrote {paths['md']} and {paths['html']}")
 
 
+@app.command()
+def viz(
+    model_dir: Path = typer.Option(
+        None,
+        help="Fitted artifact directory (default: artifacts/models/lgbm/latest).",
+    ),
+    long_path: Path = typer.Option(None, help="Path to the processed long parquet."),
+    out_dir: Path = typer.Option(None, help="Output directory (default: assets/)."),
+    horizon: int = typer.Option(28, help="Forecast horizon to visualise."),
+    n_windows: int = typer.Option(3, help="Rolling-origin CV windows to embed in the HTML."),
+    train_context: int = typer.Option(84, help="Trailing training-context days drawn before the cutoff."),
+) -> None:
+    """Render the M5 pipeline visualisation (animated SVG + interactive D3 HTML).
+
+    Loads the fitted serving artifact, picks a hero series, runs ``n_windows``
+    rolling-origin predictions, and writes ``pipeline.svg`` (auto-plays in
+    GitHub README.md) and ``pipeline.html`` (standalone, scrub-able) under
+    ``out_dir``.
+    """
+    from m5.viz import render_pipeline_viz
+
+    set_global_seed()
+    md = model_dir or REPO_ROOT / "artifacts" / "models" / "lgbm" / "latest"
+    lp = long_path or SETTINGS.processed_dir / "long.parquet"
+    od = out_dir or REPO_ROOT / "assets"
+    render_pipeline_viz(
+        model_dir=md,
+        long_path=lp,
+        out_dir=od,
+        horizon=horizon,
+        n_windows=n_windows,
+        train_context=train_context,
+    )
+
+
 def main() -> None:  # pragma: no cover
     app()
 

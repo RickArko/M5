@@ -6,7 +6,7 @@
         test-integration test-fast cov check \
         download prep cv-stats cv-lgbm cv-hier cv-recipe forecast-stats forecast-lgbm forecast-hier \
         train serve serve-prod docker-build docker-up docker-down docker-logs \
-        score score-all eval notebook clean clean-all
+        score score-all eval viz notebook clean clean-all
 
 UV       ?= uv
 VENV     ?= .venv
@@ -172,6 +172,14 @@ score-all: ## Score every CV artifact found in artifacts/ (cv_<name>.parquet)
 	echo "$$CMD"; eval $$CMD
 
 eval: cv-stats cv-lgbm score ## End-to-end: stats + lgbm CV, then score the merged report
+
+# ---- Visualisation -------------------------------------------------
+# `make viz` reads the latest fitted artifact + long.parquet and renders
+# assets/pipeline.svg (auto-plays in README) + assets/pipeline.html
+# (interactive D3 page, scrub through CV windows).
+
+viz: ## Render assets/pipeline.{svg,html} from the latest fitted artifact
+	$(UV) run m5 viz
 
 # ---- Notebooks -----------------------------------------------------
 
