@@ -142,3 +142,57 @@ $$
 # Bottom Forecast (Item + Store)
 For every bottom-level-forecast we can view the full predictions against each other like this:
 ![ExampleSKUForecast](plots/ExampleForecast.png)
+
+---
+
+## Test `End2End`
+
+Test plan to run after your make cv-stats finishes — the most informative E2E proves the recipe path produces identical output to the legacy path on real data.
+
+```bash
+# Step 1 — preserve the legacy-path output your current run produced.
+mv artifacts/cv_stats.parquet artifacts/cv_stats_legacy.parquet
+
+# Step 2 — run the same CV via the recipe-driven path.
+make cv-recipe RECIPE=configs/m5/stats.yaml
+# (writes artifacts/cv_stats.parquet — recipe stem is "stats")
+
+# Step 3 — assert byte-identical equivalence.
+uv run python -c "
+import pandas as pd
+a = pd.read_parquet('artifacts/cv_stats_legacy.parquet').sort_values(['unique_id','ds']).reset_index(drop=True)
+b = pd.read_parquet('artifacts/cv_stats.parquet').sort_values(['unique_id','ds']).reset_index(drop=True)
+pd.testing.assert_frame_equal(a, b)
+print(f'OK — {len(a):,d} rows match across {a[\"unique_id\"].nunique():,d} series and {a[\"cutoff\"].nunique()}
+cutoffs')
+"
+```
+
+If that passes, the YAML migration is provably faithful on production data, not just toy fixtures.
+
+Bigger E2E options if you want broader coverage:
+
+```bash
+# A. Same pattern for LGBM (longer run — ~minutes on full data):
+mv artifacts/cv_lgbm.parquet artifacts/cv_lgbm_legacy.parquet  # if it exists
+make cv-lgbm                                                    # legacy path
+mv artifacts/cv_lgbm.parquet artifacts/cv_lgbm_legacy.parquet
+make cv-recipe RECIPE=configs/m5/lgbm.yaml                      # recipe path
+# then the same assert_frame_equal on cv_lgbm_legacy vs cv_lgbm
+
+# B. Full notebook execution (proves notebook migrations work on real data):
+uv run --group notebook jupyter nbconvert --to notebook --execute \
+    --output executed_03.ipynb notebooks/03_stats_forecast.ipynb
+# Then inspect executed_03.ipynb for errors. Slow (~5+ min) but exhaustive.
+
+# C. Full pipeline smoke (long):
+make prep && make cv-stats && make cv-lgbm && make cv-hier
+```
+
+I'd start with Step 1-3 above — small, targeted, and answers the specific "did the recipe migration introduce drift?"
+question that matters most. Tell me when cv-stats finishes and which path you want, and I'll run it.
+
+
+## Repos
+
+https://github.com/marcopeix/conformal-ts

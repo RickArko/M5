@@ -10,9 +10,17 @@ Reference: https://mofc.unic.ac.cy/m5-competition/
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import pandas as pd
+
+# M5 competition day-index constants — fixed by the competition split, not env.
+# d_1 .. d_1941 = train, d_1942 .. d_1969 = held-out evaluation window.
+M5_TRAIN_END_DAY: int = 1941
+M5_FORECAST_START_DAY: int = 1942
+M5_FORECAST_END_DAY: int = 1969
+M5_HORIZON: int = M5_FORECAST_END_DAY - M5_FORECAST_START_DAY + 1  # 28
 
 
 @dataclass
@@ -115,3 +123,45 @@ def wrmsse_for_models(
         for m in model_cols
     }
     return pd.Series(scores, name="wrmsse").sort_values()
+
+
+def make_submission(
+    preds: pd.DataFrame,
+    *,
+    h: int = M5_HORIZON,
+    id_col: str = "unique_id",
+    time_col: str = "ds",
+    value_col: str | None = None,
+    layout: Literal["kaggle", "d_index"] = "kaggle",
+) -> pd.DataFrame:
+    """Pivot a long forecast frame into the wide M5 submission layout.
+
+    Args:
+        preds: Long frame with columns ``id_col``, ``time_col``, ``value_col``.
+        h: forecast horizon (column count).
+        value_col: forecast column. If ``None``, inferred as the only column not
+            in ``(id_col, time_col)`` — set explicitly when several model columns
+            sit alongside in the same frame.
+        layout: ``"kaggle"`` → ``F1..Fh`` (what ``M5Evaluation.evaluate`` expects).
+            ``"d_index"`` → ``d_1942..d_{1942+h-1}`` (raw competition day index).
+
+    Returns:
+        Wide DataFrame indexed by ``id_col`` with ``h`` columns, sorted by id.
+    """
+    if value_col is None:
+        candidates = [c for c in preds.columns if c not in (id_col, time_col)]
+        if len(candidates) != 1:
+            raise ValueError(f"value_col not given and could not be inferred; candidates: {candidates}")
+        value_col = candidates[0]
+
+    wide = preds.pivot_table(index=id_col, columns=time_col, values=value_col, observed=True)
+    if layout == "kaggle":
+        wide.columns = [f"F{i + 1}" for i in range(h)]
+    elif layout == "d_index":
+        wide.columns = [f"d_{M5_FORECAST_START_DAY + i}" for i in range(h)]
+    else:
+        raise ValueError(f"Unknown layout: {layout!r}. Use 'kaggle' or 'd_index'.")
+
+    wide.columns.name = None
+    wide.index.name = id_col
+    return wide

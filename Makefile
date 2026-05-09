@@ -5,6 +5,7 @@
 .PHONY: help bootstrap install activate lint fmt typecheck test test-smoke test-unit \
         test-integration test-fast cov check \
         download prep cv-stats cv-lgbm cv-hier cv-recipe forecast-stats forecast-lgbm forecast-hier \
+        train serve serve-prod docker-build docker-up docker-down docker-logs \
         score score-all eval notebook clean clean-all
 
 UV       ?= uv
@@ -124,6 +125,33 @@ forecast-lgbm: ## Train+predict LightGBM global model
 
 forecast-hier: ## Train+predict hierarchical (Theta base, 4 reconcilers)
 	$(UV) run m5 forecast hier --horizon $(HORIZON)
+
+# ---- Serving (FastAPI) --------------------------------------------
+# `make train` produces a versioned artifact under artifacts/models/lgbm/<ts>/
+# and updates the `latest` symlink. `make serve` boots uvicorn pointing at
+# M5_SERVE_MODEL_DIR (defaults to artifacts/models/lgbm/latest).
+
+train: ## Fit LightGBM and persist a serving artifact (model.joblib + metadata + history + statics)
+	$(UV) run m5 train --horizon $(HORIZON)
+
+serve: ## Run the FastAPI service in dev mode (uvicorn --reload)
+	$(UV) run m5 serve --reload
+
+serve-prod: ## Run the FastAPI service with prod-style settings (no reload, multi-worker via env)
+	M5_SERVE_LOG_JSON=true $(UV) run m5 serve
+
+docker-build: ## Build the production container image (m5-forecaster:local)
+	docker build -t m5-forecaster:local .
+
+docker-up: ## Bring up the service via docker compose (mounts the latest artifact)
+	docker compose up -d --build
+	@echo "==> Service: http://localhost:$${M5_SERVE_PORT:-8000} (docs at /docs, metrics at /metrics)"
+
+docker-down: ## Tear down the docker compose stack
+	docker compose down
+
+docker-logs: ## Tail the container logs
+	docker compose logs -f m5-forecaster
 
 # ---- Scoring + report ----------------------------------------------
 # `make score MODELS="stats lgbm"` reads artifacts/cv_<m>.parquet for each

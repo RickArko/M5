@@ -209,10 +209,19 @@ def per_level_scores(inp: ScoringInputs) -> pd.DataFrame:
 
     def _join_keys(df: pd.DataFrame, cols: list[str]) -> pd.Series:
         # ``df[[c]].agg("/".join, axis=1)`` returns a DataFrame on single-key
-        # specs, so branch on length.
-        if len(cols) == 1:
-            return df[cols[0]].astype(str)
-        return df[cols].astype(str).agg("/".join, axis=1)
+        # specs, so build the key series explicitly from normalized Series views.
+        parts: list[pd.Series] = []
+        for c in cols:
+            col = df[c]
+            if isinstance(col, pd.DataFrame):
+                col = col.iloc[:, 0]
+            parts.append(col.astype(str))
+        if len(parts) == 1:
+            return parts[0].reset_index(drop=True)
+        out = parts[0]
+        for p in parts[1:]:
+            out = out + "/" + p
+        return out.reset_index(drop=True)
 
     rows = []
     for level_spec in M5_LEVELS_SPEC:
