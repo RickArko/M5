@@ -2,11 +2,12 @@
 # Bootstrap a one-shot M5 training VM.
 #
 # Lifecycle:
-#   1. Install OS deps (git, curl, make, libgomp1) + uv.
+#   1. Install OS deps (git, curl, make, libgomp1) + uv + the per-cloud CLI
+#      that matches M5_ARTIFACT_DEST (gcloud / aws / az).
 #   2. Clone the M5 repo and checkout the requested ref.
 #   3. uv-sync (no dev / no notebook groups — keep the box lean).
-#   4. Run `m5 download && m5 prep && m5 train`.
-#   5. Push the resulting artifact directory to object storage.
+#   4. Run `m5 download → prep → cv stats → cv lgbm → score → train`.
+#   5. Push the model artifact AND the score report to object storage.
 #   6. (Optional) `poweroff` so the VM doesn't keep billing.
 #
 # Inputs are read from /etc/m5-cloud.env which Terraform writes during boot.
@@ -29,6 +30,8 @@ echo "==> $(date -Is) m5-train: starting"
 : "${M5_N_SERIES:=-1}"
 : "${M5_HORIZON:=28}"
 : "${M5_TRAIN_SHUTDOWN_ON_DONE:=true}"
+: "${M5_RUN_CV:=true}"            # opt-out: set to false to skip cv + score
+: "${M5_CV_N_WINDOWS:=3}"
 
 REPO_DIR=/srv/M5
 UV_BIN=/root/.local/bin/uv
@@ -37,7 +40,31 @@ UV_BIN=/root/.local/bin/uv
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
-    git curl ca-certificates make jq libgomp1 awscli unzip
+    git curl ca-certificates make jq libgomp1 unzip apt-transport-https gnupg
+
+# Install the object-storage CLI that matches the URI scheme of the artifact dest.
+case "$M5_ARTIFACT_DEST" in
+    gs://*)
+        echo "==> installing google-cloud-cli (for gs:// push)"
+        curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+            | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+            > /etc/apt/sources.list.d/google-cloud-sdk.list
+        apt-get update -y
+        apt-get install -y --no-install-recommends google-cloud-cli
+        ;;
+    s3://*)
+        echo "==> installing awscli (for s3:// push)"
+        apt-get install -y --no-install-recommends awscli
+        ;;
+    az://*)
+        echo "==> installing azure-cli (for az:// push)"
+        curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+        ;;
+    *)
+        echo "WARN: unknown M5_ARTIFACT_DEST scheme: $M5_ARTIFACT_DEST" >&2
+        ;;
+esac
 
 if [ ! -x "$UV_BIN" ]; then
     echo "==> installing uv"
@@ -59,13 +86,26 @@ git pull --ff-only origin "$M5_GIT_REF" || true
 "$UV_BIN" sync --no-group dev --no-group notebook
 
 # ---- pipeline ------------------------------------------------------------
+echo "==> $(date -Is) m5-train: download"
 "$UV_BIN" run m5 download
+echo "==> $(date -Is) m5-train: prep (last_n_days=$M5_LAST_N_DAYS, n_series=$M5_N_SERIES)"
 "$UV_BIN" run m5 prep \
     --last-n-days "$M5_LAST_N_DAYS" \
     --n-series "$M5_N_SERIES"
+
+if [ "$M5_RUN_CV" = "true" ]; then
+    echo "==> $(date -Is) m5-train: cv stats (h=$M5_HORIZON, n_windows=$M5_CV_N_WINDOWS)"
+    "$UV_BIN" run m5 cv stats --horizon "$M5_HORIZON" --n-windows "$M5_CV_N_WINDOWS"
+    echo "==> $(date -Is) m5-train: cv lgbm (h=$M5_HORIZON, n_windows=$M5_CV_N_WINDOWS)"
+    "$UV_BIN" run m5 cv lgbm  --horizon "$M5_HORIZON" --n-windows "$M5_CV_N_WINDOWS"
+    echo "==> $(date -Is) m5-train: score"
+    "$UV_BIN" run m5 score -m cv_stats -m cv_lgbm
+fi
+
+echo "==> $(date -Is) m5-train: train (final fit on full data)"
 "$UV_BIN" run m5 train --horizon "$M5_HORIZON"
 
-# ---- push artifact -------------------------------------------------------
+# ---- push model artifact -------------------------------------------------
 ARTIFACT_DIR=$(readlink -f artifacts/models/lgbm/latest)
 TIMESTAMP=$(basename "$ARTIFACT_DIR")
 DEST="${M5_ARTIFACT_DEST%/}/$TIMESTAMP"
@@ -77,6 +117,28 @@ bash cloud/scripts/push_artifact.sh "$ARTIFACT_DIR" "$DEST"
 # Mirror to a stable "latest" prefix so serve VMs don't need to know the timestamp.
 echo "==> pushing $ARTIFACT_DIR -> $LATEST_DEST (stable alias)"
 bash cloud/scripts/push_artifact.sh "$ARTIFACT_DIR" "$LATEST_DEST"
+
+# ---- push score report (if cv ran) ---------------------------------------
+if [ "$M5_RUN_CV" = "true" ] && [ -d reports ]; then
+    REPORT_DEST="${M5_ARTIFACT_DEST%/}/reports/$TIMESTAMP"
+    REPORT_LATEST="${M5_ARTIFACT_DEST%/}/reports/latest"
+    echo "==> pushing reports/ -> $REPORT_DEST"
+    bash cloud/scripts/push_artifact.sh reports "$REPORT_DEST"
+    echo "==> pushing reports/ -> $REPORT_LATEST (stable alias)"
+    bash cloud/scripts/push_artifact.sh reports "$REPORT_LATEST"
+fi
+
+# Also push the raw cv parquets so we can re-score offline.
+if [ "$M5_RUN_CV" = "true" ] && compgen -G "artifacts/cv_*.parquet" > /dev/null; then
+    CV_DIR=$(mktemp -d)
+    cp artifacts/cv_*.parquet "$CV_DIR/"
+    CV_DEST="${M5_ARTIFACT_DEST%/}/cv/$TIMESTAMP"
+    CV_LATEST="${M5_ARTIFACT_DEST%/}/cv/latest"
+    echo "==> pushing artifacts/cv_*.parquet -> $CV_DEST"
+    bash cloud/scripts/push_artifact.sh "$CV_DIR" "$CV_DEST"
+    echo "==> pushing artifacts/cv_*.parquet -> $CV_LATEST (stable alias)"
+    bash cloud/scripts/push_artifact.sh "$CV_DIR" "$CV_LATEST"
+fi
 
 echo "==> $(date -Is) m5-train: complete (timestamp=$TIMESTAMP)"
 echo "$TIMESTAMP" > /srv/M5/.train-complete
