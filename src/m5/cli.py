@@ -578,13 +578,25 @@ def viz(
     horizon: int = typer.Option(28, help="Forecast horizon to visualise."),
     n_windows: int = typer.Option(3, help="Rolling-origin CV windows to embed in the HTML."),
     train_context: int = typer.Option(84, help="Trailing training-context days drawn before the cutoff."),
+    gif: bool = typer.Option(
+        True,
+        "--gif/--no-gif",
+        help="Also render assets/pipeline.gif (universal renderer support; ~50-100x larger than the SVG).",
+    ),
+    gif_fps: int = typer.Option(12, help="Frame rate for the GIF."),
+    gif_duration: float = typer.Option(12.0, help="GIF loop length, seconds."),
 ) -> None:
-    """Render the M5 pipeline visualisation (animated SVG + interactive D3 HTML).
+    """Render the M5 pipeline visualisation (animated SVG + interactive D3 HTML + GIF).
 
     Loads the fitted serving artifact, picks a hero series, runs ``n_windows``
-    rolling-origin predictions, and writes ``pipeline.svg`` (auto-plays in
-    GitHub README.md) and ``pipeline.html`` (standalone, scrub-able) under
-    ``out_dir``.
+    rolling-origin predictions, and writes:
+
+    - ``pipeline.svg``  — animated SVG (SMIL); plays in GitHub README and
+      modern browsers; non-SMIL viewers (VSCode preview etc.) see the static
+      final-frame composition.
+    - ``pipeline.html`` — standalone D3.js page; scrub through CV windows,
+      hover for per-day truth/forecast/baseline values.
+    - ``pipeline.gif``  — animated GIF; the universally-rendered fallback.
     """
     from m5.viz import render_pipeline_viz
 
@@ -599,6 +611,9 @@ def viz(
         horizon=horizon,
         n_windows=n_windows,
         train_context=train_context,
+        gif=gif,
+        gif_fps=gif_fps,
+        gif_duration=gif_duration,
     )
 
 

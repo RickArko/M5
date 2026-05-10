@@ -179,3 +179,50 @@ def test_payload_to_json_round_trips() -> None:
     assert len(parsed["train_y"]) == 20
     assert len(parsed["windows"][0]["forecast"]) == 7
     assert payload.latest is payload.windows[-1]
+
+
+# ---- SVG static fallback ---------------------------------------------------
+
+
+def test_render_svg_static_frame_is_composed_not_blank() -> None:
+    """Non-SMIL renderers (VSCode preview etc.) must see useful content.
+
+    All elements that would be visible at the end of the animation should
+    have static attribute values matching the final composed state, so a
+    viewer that strips SMIL still sees the train line + forecast + truth +
+    leaderboard etc., not an empty panel.
+    """
+    payload = _payload()
+    svg = render_svg(payload)
+    # Pills appear as opacity=1 statically (final state visible)
+    assert 'class="pill" opacity="1"' in svg
+    # Mask groups visible statically
+    assert 'class="train-mask" opacity="1"' in svg
+    assert 'class="test-mask" opacity="1"' in svg
+    # Animation values end at 1, not 0 (no fade-out)
+    assert 'values="0;0;1;1;1"' in svg
+    # No initial width="0" on clip rects or leaderboard bars (static = final)
+    assert 'width="0"' not in svg
+
+
+# ---- GIF renderer (smoke; small payload to keep it under ~3s) ---------------
+
+
+def test_render_gif_writes_a_valid_gif(tmp_path) -> None:
+    """Smoke test the matplotlib GIF pipeline on a tiny payload."""
+    pytest.importorskip("matplotlib")
+    pytest.importorskip("PIL")
+    from PIL import Image
+
+    from m5.viz.pipeline import render_gif
+
+    payload = _payload(n_train=14, h=7, n_windows=1)
+    out = tmp_path / "pipeline.gif"
+    render_gif(payload, out, fps=6, duration=2.0, width=320, height=180)
+    assert out.exists()
+    assert out.stat().st_size > 1024  # > 1 KB
+    with Image.open(out) as img:
+        assert img.format == "GIF"
+        assert img.size == (320, 180)
+        # Multi-frame
+        assert getattr(img, "n_frames", 1) > 1

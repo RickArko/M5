@@ -36,27 +36,29 @@
     .lift-bad{ fill: #f85149; font: 700 16px ui-monospace, SFMono-Regular, monospace; }
   ]]></style>
   <defs>
+    <!-- Static rect width = final reveal width so non-SMIL renderers show
+         the fully-revealed lines. SMIL viewers see the animation override. -->
     <clipPath id="reveal-train">
-      <rect x="58" y="91" height="273" width="0">
+      <rect x="58" y="91" height="273" width="630.1">
         <animate attributeName="width"
           values="0;0;630.1;630.1;630.1"
-          keyTimes="0;0.1286;0.2143;0.9857;1"
+          keyTimes="0;0.1286;0.2143;0.9964;1"
           dur="14.0s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
     <clipPath id="reveal-fc">
-      <rect x="688.11" y="91" height="273" width="0">
+      <rect x="688.11" y="91" height="273" width="213.9">
         <animate attributeName="width"
           values="0;0;213.9;213.9;213.9"
-          keyTimes="0;0.4643;0.5714;0.9857;1"
+          keyTimes="0;0.4643;0.5714;0.9964;1"
           dur="14.0s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
     <clipPath id="reveal-truth">
-      <rect x="688.11" y="91" height="273" width="0">
+      <rect x="688.11" y="91" height="273" width="213.9">
         <animate attributeName="width"
           values="0;0;213.9;213.9;213.9"
-          keyTimes="0;0.6071;0.6929;0.9857;1"
+          keyTimes="0;0.6071;0.6929;0.9964;1"
           dur="14.0s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
@@ -99,9 +101,9 @@
                        values="0;1;1;0"
                        keyTimes="0;0.5857;0.7;0.7143"
                        dur="14.0s" repeatCount="indefinite"/>
-            </text><text x="60" y="68" class="caption" opacity="0">Score vs truth — RMSE LGBM 2.30 vs Naive 3.36
+            </text><text x="60" y="68" class="caption" opacity="1">Score vs truth — RMSE LGBM 2.30 vs Naive 3.36
               <animate attributeName="opacity"
-                       values="0;1;1;0"
+                       values="0;1;1;1"
                        keyTimes="0;0.7286;0.9857;1"
                        dur="14.0s" repeatCount="indefinite"/>
             </text>
@@ -113,80 +115,80 @@
     <line x1="60.00" y1="360" x2="60.00" y2="364" class="tick"/><line x1="165.95" y1="360" x2="165.95" y2="364" class="tick"/><line x1="271.89" y1="360" x2="271.89" y2="364" class="tick"/><line x1="377.84" y1="360" x2="377.84" y2="364" class="tick"/><line x1="483.78" y1="360" x2="483.78" y2="364" class="tick"/><line x1="589.73" y1="360" x2="589.73" y2="364" class="tick"/><line x1="695.68" y1="360" x2="695.68" y2="364" class="tick"/><line x1="801.62" y1="360" x2="801.62" y2="364" class="tick"/>
   </g>
 
-  <g class="train-mask" opacity="0">
+  <g class="train-mask" opacity="1">
     <rect x="60" y="95" width="628.11" height="265"/>
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.2143;0.25;0.9643;1" dur="14.0s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;1" keyTimes="0;0.2143;0.25;0.9964;1" dur="14.0s" repeatCount="indefinite"/>
   </g>
-  <g class="test-mask" opacity="0">
+  <g class="test-mask" opacity="1">
     <rect x="688.11" y="95" width="211.89" height="265"/>
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.2286;0.2643;0.9643;1" dur="14.0s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;1" keyTimes="0;0.2286;0.2643;0.9964;1" dur="14.0s" repeatCount="indefinite"/>
   </g>
 
   <g clip-path="url(#reveal-train)">
     <polyline class="train" points="60.00,304.14 67.57,325.09 75.14,346.03 82.70,311.12 90.27,269.22 97.84,129.57 105.41,171.46 112.97,346.03 120.54,318.10 128.11,346.03 135.68,276.21 143.24,276.21 150.81,311.12 158.38,318.10 165.95,353.02 173.51,332.07 181.08,311.12 188.65,353.02 196.22,290.17 203.78,276.21 211.35,325.09 218.92,332.07 226.49,339.05 234.05,318.10 241.62,332.07 249.19,339.05 256.76,290.17 264.32,318.10 271.89,346.03 279.46,332.07 287.03,339.05 294.59,325.09 302.16,325.09 309.73,290.17 317.30,311.12 324.86,346.03 332.43,353.02 340.00,332.07 347.57,318.10 355.14,332.07 362.70,332.07 370.27,339.05 377.84,346.03 385.41,318.10 392.97,346.03 400.54,346.03 408.11,332.07 415.68,283.19 423.24,325.09 430.81,332.07 438.38,353.02 445.95,325.09 453.51,304.14 461.08,276.21 468.65,283.19 476.22,318.10 483.78,332.07 491.35,353.02 498.92,346.03 506.49,325.09 514.05,332.07 521.62,262.24 529.19,318.10 536.76,318.10 544.32,325.09 551.89,332.07 559.46,290.17 567.03,325.09 574.59,283.19 582.16,332.07 589.73,332.07 597.30,325.09 604.86,353.02 612.43,332.07 620.00,318.10 627.57,262.24 635.14,311.12 642.70,325.09 650.27,353.02 657.84,297.15 665.41,332.07 672.97,297.15 680.54,325.09 688.11,311.12"/>
   </g>
 
-  <g opacity="0">
+  <g opacity="1">
     <line class="cutoff" x1="688.11" y1="89" x2="688.11" y2="366"/>
     <text class="caption" x="688.11" y="71" text-anchor="middle">cutoff · 2016-04-24</text>
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.2143;0.2571;0.9643;1" dur="14.0s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;1" keyTimes="0;0.2143;0.2571;0.9964;1" dur="14.0s" repeatCount="indefinite"/>
   </g>
 
-  <g class="pill" opacity="0">
+  <g class="pill" opacity="1">
               <rect x="700.1" y="67.0" width="50" height="18" rx="9" />
               <text x="725.1" y="80.0" text-anchor="middle">lag 7</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3214;0.3571;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3214;0.3571;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="756.1" y="67.0" width="50" height="18" rx="9" />
               <text x="781.1" y="80.0" text-anchor="middle">lag 14</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3257;0.3614;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3257;0.3614;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="812.1" y="67.0" width="50" height="18" rx="9" />
               <text x="837.1" y="80.0" text-anchor="middle">lag 28</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.33;0.3657;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.33;0.3657;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="868.1" y="67.0" width="50" height="18" rx="9" />
               <text x="893.1" y="80.0" text-anchor="middle">roll 7</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3343;0.37;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3343;0.37;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="924.1" y="67.0" width="50" height="18" rx="9" />
               <text x="949.1" y="80.0" text-anchor="middle">roll 28</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3386;0.3743;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3386;0.3743;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="980.1" y="67.0" width="50" height="18" rx="9" />
               <text x="1005.1" y="80.0" text-anchor="middle">price</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3429;0.3786;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3429;0.3786;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="1036.1" y="67.0" width="50" height="18" rx="9" />
               <text x="1061.1" y="80.0" text-anchor="middle">snap</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3471;0.3829;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3471;0.3829;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
-            </g><g class="pill" opacity="0">
+            </g><g class="pill" opacity="1">
               <rect x="1092.1" y="67.0" width="50" height="18" rx="9" />
               <text x="1117.1" y="80.0" text-anchor="middle">is_event</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="0;0.3;0.3514;0.3871;0.6786;0.8214;1"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="0;0.3;0.3514;0.3871;0.6786;0.9964;1"
                        dur="14.0s" repeatCount="indefinite"/>
             </g>
 
@@ -211,25 +213,25 @@
   </g>
 
   <!-- Leaderboard panel -->
-  <g transform="translate(140,415)" opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.7143;0.7643;0.9643;1" dur="14.0s" repeatCount="indefinite"/>
+  <g transform="translate(140,415)" opacity="1">
+    <animate attributeName="opacity" values="0;0;1;1;1" keyTimes="0;0.7143;0.7643;0.9964;1" dur="14.0s" repeatCount="indefinite"/>
     <rect class="lb-bg" x="-12" y="-12" width="344" height="114" rx="6"/>
     <text class="lb-label" x="0" y="6">RMSE on the held-out window</text>
 
     <text class="lb-label" x="0" y="32">Seasonal Naive</text>
     <rect class="lb-bar-base" x="120" y="20" rx="3"
-          height="14" width="0">
+          height="14" width="278.3">
       <animate attributeName="width" values="0;0;278.3;278.3;278.3"
-               keyTimes="0;0.7429;0.8143;0.9857;1"
+               keyTimes="0;0.7429;0.8143;0.9964;1"
                dur="14.0s" repeatCount="indefinite"/>
     </rect>
     <text class="lb-num" x="326" y="32">3.36</text>
 
     <text class="lb-label" x="0" y="62">LightGBM</text>
     <rect class="lb-bar-lgbm" x="120" y="50" rx="3"
-          height="14" width="0">
+          height="14" width="190.2">
       <animate attributeName="width" values="0;0;190.2;190.2;190.2"
-               keyTimes="0;0.7571;0.8286;0.9857;1"
+               keyTimes="0;0.7571;0.8286;0.9964;1"
                dur="14.0s" repeatCount="indefinite"/>
     </rect>
     <text class="lb-num" x="326" y="62">2.30</text>

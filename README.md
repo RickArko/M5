@@ -8,15 +8,19 @@ Goal: get close to world-class with as few features as possible — three model
 families (Theta, AutoETS, LightGBM) on a deliberately small feature menu, with
 reproducible rolling-origin cross-validation.
 
-![M5 pipeline — fit, predict, score (animated SVG)](assets/pipeline.svg)
+![M5 pipeline — fit, predict, score (animated GIF)](assets/pipeline.gif)
 
 > Regenerate with `make viz` (after `make train`) — reads
 > `artifacts/models/lgbm/latest/`, picks a hero series, runs rolling-origin
-> predictions, and writes [`assets/pipeline.svg`](assets/pipeline.svg) (the
-> animation above, SMIL-animated, no JS) plus
-> [`assets/pipeline.html`](assets/pipeline.html), an interactive D3.js page
-> where you can scrub through CV windows and hover for per-day
-> truth / forecast / baseline values.
+> predictions, and writes three files:
+>
+> | File | When to use |
+> |---|---|
+> | [`assets/pipeline.gif`](assets/pipeline.gif) (the animation above) | Universal — plays in every renderer (README, VSCode preview, PDF). |
+> | [`assets/pipeline.svg`](assets/pipeline.svg) | Crisp / scalable. Plays via SMIL on GitHub web + modern browsers; non-SMIL viewers see the static final-frame composition. |
+> | [`assets/pipeline.html`](assets/pipeline.html) | Interactive D3.js page — scrub through CV windows, hover for per-day truth / forecast / baseline values. Open in a browser. |
+>
+> Skip the GIF (faster, no matplotlib pass) with `uv run m5 viz --no-gif`.
 
 ## Stack
 

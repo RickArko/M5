@@ -7,6 +7,20 @@ walk a viewer through fit -> predict -> score on one hero series.
 
 from __future__ import annotations
 
-from m5.viz.pipeline import VizPayload, build_payload, render_pipeline_viz
+from m5.viz.pipeline import (
+    VizPayload,
+    build_payload,
+    render_gif,
+    render_html,
+    render_pipeline_viz,
+    render_svg,
+)
 
-__all__ = ["VizPayload", "build_payload", "render_pipeline_viz"]
+__all__ = [
+    "VizPayload",
+    "build_payload",
+    "render_gif",
+    "render_html",
+    "render_pipeline_viz",
+    "render_svg",
+]

@@ -324,12 +324,12 @@ def render_svg(payload: VizPayload, *, width: int = 960, height: int = 540) -> s
         pill_xs.append(pill_x)
         pill_x += 56
     pills_svg = "".join(
-        f"""<g class="pill" opacity="0">
+        f"""<g class="pill" opacity="1">
               <rect x="{x:.1f}" y="{pill_y - 16:.1f}" width="50" height="18" rx="9" />
               <text x="{x + 25:.1f}" y="{pill_y - 3:.1f}" text-anchor="middle">{escape(label)}</text>
               <animate attributeName="opacity"
-                       values="0;0;0;1;1;1;0"
-                       keyTimes="{_kt(0, 4.2, 4.5 + i * 0.06, 5.0 + i * 0.06, 9.5, 11.5, _DUR_S)}"
+                       values="0;0;0;1;1;1;1"
+                       keyTimes="{_kt(0, 4.2, 4.5 + i * 0.06, 5.0 + i * 0.06, 9.5, _DUR_S - 0.05, _DUR_S)}"
                        dur="{_DUR_S}s" repeatCount="indefinite"/>
             </g>"""
         for i, (x, label) in enumerate(zip(pill_xs, pill_labels, strict=True))
@@ -350,37 +350,36 @@ def render_svg(payload: VizPayload, *, width: int = 960, height: int = 540) -> s
             14.0,
         ),
     ]
+
+    # The final ("score") caption stays visible at the end so non-SMIL
+    # renderers (VSCode markdown preview etc.) show a meaningful frame.
+    def _caption_attrs(idx: int) -> tuple[str, str]:
+        if idx == len(captions) - 1:
+            return ("1", "0;1;1;1")
+        return ("0", "0;1;1;0")
+
     caption_svg = "".join(
-        f"""<text x="60" y="68" class="caption" opacity="0">{escape(text)}
+        f"""<text x="60" y="68" class="caption" opacity="{_caption_attrs(idx)[0]}">{escape(text)}
               <animate attributeName="opacity"
-                       values="0;1;1;0"
+                       values="{_caption_attrs(idx)[1]}"
                        keyTimes="{_kt(0, t0 + 0.2, t1 - 0.2, t1)}"
                        dur="{_DUR_S}s" repeatCount="indefinite"/>
             </text>"""
-        for _, text, t0, t1 in captions
+        for idx, (_, text, t0, t1) in enumerate(captions)
     )
 
     # --- SMIL helpers for the chart layers ---
-    def reveal(start: float, span: float = 1.5, fade_out: float = _DUR_S - 0.5) -> str:
-        """Opacity 0 → 1 between [start, start+span], hold, then fade just before loop."""
+    # Animation values stay at opacity=1 at the end of the loop so the static
+    # final-frame attribute is also the SMIL final-frame value — non-SMIL
+    # renderers (VSCode preview, thumbnail tools) display the fully-composed
+    # pipeline; SMIL viewers see the same composition built up over time.
+    def reveal(start: float, span: float = 1.5) -> str:
+        """Animate opacity 0 → 1 across [start, start+span]; hold visible."""
         return (
             f'<animate attributeName="opacity" '
-            f'values="0;0;1;1;0" '
-            f'keyTimes="{_kt(0, start, start + span, fade_out, _DUR_S)}" '
+            f'values="0;0;1;1;1" '
+            f'keyTimes="{_kt(0, start, start + span, _DUR_S - 0.05, _DUR_S)}" '
             f'dur="{_DUR_S}s" repeatCount="indefinite"/>'
-        )
-
-    # Reveal-by-clip (rectangle width grows from 0 to chart_w * frac).
-    def reveal_clip(start: float, span: float, frac_start: float, frac_end: float, x: float) -> str:
-        w0 = chart_w * frac_start
-        w1 = chart_w * frac_end
-        return (
-            f'<rect x="{x:.2f}" y="{py_top - 4}" height="{chart_h + 8}" width="0" fill="white">'
-            f'<animate attributeName="width" '
-            f'values="{w0};{w0};{w1};{w1};{w1}" '
-            f'keyTimes="{_kt(0, start, start + span, _DUR_S - 0.2, _DUR_S)}" '
-            f'dur="{_DUR_S}s" repeatCount="indefinite"/>'
-            f"</rect>"
         )
 
     # Static axis ticks: every 14 days
@@ -441,27 +440,29 @@ def render_svg(payload: VizPayload, *, width: int = 960, height: int = 540) -> s
     .lift-bad{{ fill: #f85149; font: 700 16px ui-monospace, SFMono-Regular, monospace; }}
   ]]></style>
   <defs>
+    <!-- Static rect width = final reveal width so non-SMIL renderers show
+         the fully-revealed lines. SMIL viewers see the animation override. -->
     <clipPath id="reveal-train">
-      <rect x="{px_left - 2}" y="{py_top - 4}" height="{chart_h + 8}" width="0">
+      <rect x="{px_left - 2}" y="{py_top - 4}" height="{chart_h + 8}" width="{cutoff_x - px_left + 2:.1f}">
         <animate attributeName="width"
           values="0;0;{cutoff_x - px_left + 2:.1f};{cutoff_x - px_left + 2:.1f};{cutoff_x - px_left + 2:.1f}"
-          keyTimes="{_kt(0, 1.8, 3.0, _DUR_S - 0.2, _DUR_S)}"
+          keyTimes="{_kt(0, 1.8, 3.0, _DUR_S - 0.05, _DUR_S)}"
           dur="{_DUR_S}s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
     <clipPath id="reveal-fc">
-      <rect x="{cutoff_x:.2f}" y="{py_top - 4}" height="{chart_h + 8}" width="0">
+      <rect x="{cutoff_x:.2f}" y="{py_top - 4}" height="{chart_h + 8}" width="{px_right - cutoff_x + 2:.1f}">
         <animate attributeName="width"
           values="0;0;{px_right - cutoff_x + 2:.1f};{px_right - cutoff_x + 2:.1f};{px_right - cutoff_x + 2:.1f}"
-          keyTimes="{_kt(0, 6.5, 8.0, _DUR_S - 0.2, _DUR_S)}"
+          keyTimes="{_kt(0, 6.5, 8.0, _DUR_S - 0.05, _DUR_S)}"
           dur="{_DUR_S}s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
     <clipPath id="reveal-truth">
-      <rect x="{cutoff_x:.2f}" y="{py_top - 4}" height="{chart_h + 8}" width="0">
+      <rect x="{cutoff_x:.2f}" y="{py_top - 4}" height="{chart_h + 8}" width="{px_right - cutoff_x + 2:.1f}">
         <animate attributeName="width"
           values="0;0;{px_right - cutoff_x + 2:.1f};{px_right - cutoff_x + 2:.1f};{px_right - cutoff_x + 2:.1f}"
-          keyTimes="{_kt(0, 8.5, 9.7, _DUR_S - 0.2, _DUR_S)}"
+          keyTimes="{_kt(0, 8.5, 9.7, _DUR_S - 0.05, _DUR_S)}"
           dur="{_DUR_S}s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
@@ -483,11 +484,11 @@ def render_svg(payload: VizPayload, *, width: int = 960, height: int = 540) -> s
     {"".join(tick_lines)}
   </g>
 
-  <g class="train-mask" opacity="0">
+  <g class="train-mask" opacity="1">
     <rect x="{px_left}" y="{py_top}" width="{cutoff_x - px_left:.2f}" height="{chart_h}"/>
     {reveal(3.0, 0.5)}
   </g>
-  <g class="test-mask" opacity="0">
+  <g class="test-mask" opacity="1">
     <rect x="{cutoff_x:.2f}" y="{py_top}" width="{px_right - cutoff_x:.2f}" height="{chart_h}"/>
     {reveal(3.2, 0.5)}
   </g>
@@ -496,7 +497,7 @@ def render_svg(payload: VizPayload, *, width: int = 960, height: int = 540) -> s
     <polyline class="train" points="{train_pts}"/>
   </g>
 
-  <g opacity="0">
+  <g opacity="1">
     <line class="cutoff" x1="{cutoff_x:.2f}" y1="{py_top - 6}" x2="{cutoff_x:.2f}" y2="{py_bot + 6}"/>
     <text class="caption" x="{cutoff_x:.2f}" y="{py_top - 24}" text-anchor="middle">cutoff · {escape(win.cutoff)}</text>
     {reveal(3.0, 0.6)}
@@ -525,25 +526,25 @@ def render_svg(payload: VizPayload, *, width: int = 960, height: int = 540) -> s
   </g>
 
   <!-- Leaderboard panel -->
-  <g transform="translate({lb_x},{lb_y})" opacity="0">
+  <g transform="translate({lb_x},{lb_y})" opacity="1">
     {reveal(10.0, 0.7)}
     <rect class="lb-bg" x="-12" y="-12" width="{lb_w + 24}" height="{lb_h + 24}" rx="6"/>
     <text class="lb-label" x="0" y="6">RMSE on the held-out window</text>
 
     <text class="lb-label" x="0" y="32">Seasonal Naive</text>
     <rect class="lb-bar-base" x="120" y="20" rx="3"
-          height="14" width="0">
+          height="14" width="{bar_base_w:.1f}">
       <animate attributeName="width" values="0;0;{bar_base_w:.1f};{bar_base_w:.1f};{bar_base_w:.1f}"
-               keyTimes="{_kt(0, 10.4, 11.4, _DUR_S - 0.2, _DUR_S)}"
+               keyTimes="{_kt(0, 10.4, 11.4, _DUR_S - 0.05, _DUR_S)}"
                dur="{_DUR_S}s" repeatCount="indefinite"/>
     </rect>
     <text class="lb-num" x="{lb_w + 6}" y="32">{win.rmse_baseline:.2f}</text>
 
     <text class="lb-label" x="0" y="62">LightGBM</text>
     <rect class="lb-bar-lgbm" x="120" y="50" rx="3"
-          height="14" width="0">
+          height="14" width="{bar_lgbm_w:.1f}">
       <animate attributeName="width" values="0;0;{bar_lgbm_w:.1f};{bar_lgbm_w:.1f};{bar_lgbm_w:.1f}"
-               keyTimes="{_kt(0, 10.6, 11.6, _DUR_S - 0.2, _DUR_S)}"
+               keyTimes="{_kt(0, 10.6, 11.6, _DUR_S - 0.05, _DUR_S)}"
                dur="{_DUR_S}s" repeatCount="indefinite"/>
     </rect>
     <text class="lb-num" x="{lb_w + 6}" y="62">{win.rmse_lgbm:.2f}</text>
@@ -927,6 +928,270 @@ def render_html(payload: VizPayload) -> str:
     return _HTML_TEMPLATE.replace("__PAYLOAD__", payload.to_json())
 
 
+# ----------------------------------------------------------------- GIF render
+
+
+def _ease(t: float) -> float:
+    """Smoothstep — mirrors the easing the D3 page uses."""
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+    return t * t * (3 - 2 * t)
+
+
+def render_gif(
+    payload: VizPayload,
+    out_path: Path,
+    *,
+    fps: int = 12,
+    duration: float = 12.0,
+    width: int = 720,
+    height: int = 405,
+) -> Path:
+    """Render an animated GIF using matplotlib + Pillow.
+
+    Same payload + phase order as :func:`render_svg`, but encoded to GIF so it
+    plays in *every* renderer (VSCode preview, README on web, image viewers,
+    PDF exports). File size is roughly 50-100x the SVG, but it is universal.
+    """
+    # Heavy imports stay inside the function so importing m5.viz stays cheap.
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation, PillowWriter
+
+    win = payload.latest
+    train = np.asarray(payload.train_y, dtype=float)
+    truth = np.asarray(win.truth, dtype=float)
+    fc = np.asarray(win.forecast, dtype=float)
+    base = np.asarray(win.baseline, dtype=float)
+    n_train = len(train)
+    h = len(truth)
+    n_total = n_train + h
+
+    bg, panel = "#0d1117", "#161b22"
+    cl_train = "#c9d1d9"
+    cl_truth = "#58a6ff"
+    cl_fc = "#f778ba"
+    cl_base = "#d29922"
+    cl_err = "#f85149"
+    cl_text = "#f0f6fc"
+    cl_muted = "#8b949e"
+    cl_grid = "#21262d"
+    cl_axis = "#30363d"
+
+    fig = plt.figure(figsize=(width / 100, height / 100), dpi=100, facecolor=bg)
+    ax = fig.add_axes((0.07, 0.27, 0.88, 0.60))
+    ax.set_facecolor(bg)
+    ax.set_xlim(-0.5, n_total - 0.5)
+    y_max = float(max(train.max() if n_train else 1.0, truth.max(), fc.max(), base.max(), 1.0)) * 1.15
+    ax.set_ylim(0, y_max)
+    ax.tick_params(colors=cl_muted, labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_color(cl_axis)
+    ax.grid(True, color=cl_grid, alpha=0.6, linestyle="--", linewidth=0.8)
+    ax.set_xlabel("days from cutoff", color=cl_muted, fontsize=9)
+    xticks = list(range(0, n_total + 1, 14))
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([str(i - n_train) for i in xticks])
+
+    x_train = np.arange(n_train)
+    x_test = np.arange(n_train, n_total)
+
+    train_mask = ax.axvspan(-0.5, n_train - 0.5, color=cl_truth, alpha=0.04, visible=False)
+    test_mask = ax.axvspan(n_train - 0.5, n_total - 0.5, color=cl_fc, alpha=0.07, visible=False)
+    cutoff_line = ax.axvline(n_train - 0.5, color=cl_fc, linestyle="--", linewidth=1.4, visible=False)
+
+    (line_train,) = ax.plot([], [], color=cl_train, linewidth=1.6, label="train")
+    (line_base,) = ax.plot([], [], color=cl_base, linewidth=1.4, linestyle="--", label="Seasonal Naive")
+    (line_fc,) = ax.plot([], [], color=cl_fc, linewidth=2.2, label="LightGBM")
+    (line_truth,) = ax.plot([], [], color=cl_truth, linewidth=2.0, label="truth")
+    err_collection = ax.vlines([], [], [], colors=cl_err, alpha=0.55, linewidth=1.4)
+
+    legend = ax.legend(
+        loc="upper right",
+        frameon=False,
+        fontsize=8,
+        labelcolor=cl_train,
+        ncol=4,
+    )
+    for txt in legend.get_texts():
+        txt.set_color(cl_train)
+
+    fig.text(
+        0.07,
+        0.93,
+        "M5 pipeline · fit → predict → score",
+        color=cl_text,
+        fontsize=13,
+        weight=600,
+    )
+    caption = fig.text(0.07, 0.89, "", color=cl_muted, fontsize=9, family="monospace")
+    cutoff_label = ax.text(
+        n_train - 0.5,
+        y_max * 1.02,
+        f"cutoff · {win.cutoff}",
+        color=cl_muted,
+        fontsize=8,
+        ha="center",
+        visible=False,
+    )
+
+    rmse_max = max(win.rmse_lgbm, win.rmse_baseline, 1e-9) * 1.15
+    lb_x0, lb_y0, lb_w, lb_h = 0.07, 0.06, 0.50, 0.14
+    lb_bg = mpatches.FancyBboxPatch(
+        (lb_x0 - 0.01, lb_y0 - 0.02),
+        lb_w + 0.02,
+        lb_h + 0.04,
+        transform=fig.transFigure,
+        facecolor=panel,
+        edgecolor=cl_axis,
+        linewidth=1,
+        boxstyle="round,pad=0.005",
+    )
+    fig.add_artist(lb_bg)
+    fig.text(
+        lb_x0,
+        lb_y0 + lb_h - 0.005,
+        "RMSE on held-out window",
+        color=cl_muted,
+        fontsize=8.5,
+        family="monospace",
+    )
+    bar_axes_w = lb_w - 0.18
+    bar_max = win.rmse_baseline if rmse_max == 0 else rmse_max
+    base_bar = mpatches.Rectangle(
+        (lb_x0 + 0.16, lb_y0 + 0.07),
+        0.0,
+        0.025,
+        transform=fig.transFigure,
+        facecolor=cl_base,
+    )
+    lgbm_bar = mpatches.Rectangle(
+        (lb_x0 + 0.16, lb_y0 + 0.025),
+        0.0,
+        0.025,
+        transform=fig.transFigure,
+        facecolor=cl_fc,
+    )
+    fig.add_artist(base_bar)
+    fig.add_artist(lgbm_bar)
+    fig.text(lb_x0, lb_y0 + 0.085, "Seasonal Naive", color=cl_text, fontsize=8.5, family="monospace")
+    fig.text(lb_x0, lb_y0 + 0.040, "LightGBM", color=cl_text, fontsize=8.5, family="monospace")
+    base_num = fig.text(
+        lb_x0 + lb_w - 0.005,
+        lb_y0 + 0.085,
+        "",
+        color=cl_text,
+        fontsize=9,
+        family="monospace",
+        weight=600,
+        ha="right",
+    )
+    lgbm_num = fig.text(
+        lb_x0 + lb_w - 0.005,
+        lb_y0 + 0.040,
+        "",
+        color=cl_text,
+        fontsize=9,
+        family="monospace",
+        weight=600,
+        ha="right",
+    )
+    lift_pct = (
+        (win.rmse_baseline - win.rmse_lgbm) / win.rmse_baseline * 100.0 if win.rmse_baseline > 1e-9 else 0.0
+    )
+    lift_text = f"-{lift_pct:.1f}% RMSE" if lift_pct >= 0 else f"+{abs(lift_pct):.1f}% RMSE"
+    lift_color = "#3fb950" if lift_pct >= 0 else cl_err
+    lift_label = fig.text(
+        lb_x0 + lb_w + 0.04, lb_y0 + 0.06, "", color=lift_color, fontsize=14, weight=700, family="monospace"
+    )
+
+    captions_seq = [
+        (0.00, 0.13, f"Training context — last {n_train} days of {payload.hero_label}"),
+        (0.13, 0.30, f"Rolling-origin CV: hold out h={h} days"),
+        (0.30, 0.50, "Build features at the cutoff (lags / rolls / price / snap)"),
+        (0.50, 0.72, f"Predict {h} days from {win.cutoff}"),
+        (0.72, 1.00, f"Score vs truth — RMSE LGBM {win.rmse_lgbm:.2f} vs Naive {win.rmse_baseline:.2f}"),
+    ]
+
+    def caption_for(p: float) -> str:
+        for t0, t1, txt in captions_seq:
+            if t0 <= p <= t1:
+                return txt
+        return captions_seq[-1][2]
+
+    n_frames = max(round(fps * duration), 4)
+
+    def update(frame: int):
+        p = frame / (n_frames - 1) if n_frames > 1 else 1.0
+        caption.set_text(caption_for(p))
+
+        # Phase 1: train context draws in (0 .. 0.18)
+        train_frac = _ease(min(1.0, p / 0.18))
+        n_show = max(round(n_train * train_frac), 0)
+        line_train.set_data(x_train[:n_show], train[:n_show])
+
+        # Phase 2: cutoff + masks (>= 0.18)
+        if p > 0.18:
+            train_mask.set_visible(True)
+            test_mask.set_visible(True)
+            cutoff_line.set_visible(True)
+            cutoff_label.set_visible(True)
+
+        # Phase 3: predict (0.50 .. 0.72)
+        fc_frac = _ease(max(0.0, min(1.0, (p - 0.50) / 0.22)))
+        n_fc = max(round(h * fc_frac), 0)
+        line_fc.set_data(x_test[:n_fc], fc[:n_fc])
+        line_base.set_data(x_test[:n_fc], base[:n_fc])
+
+        # Phase 4: truth + error bars (0.72 .. 0.92)
+        truth_frac = _ease(max(0.0, min(1.0, (p - 0.72) / 0.20)))
+        n_truth = max(round(h * truth_frac), 0)
+        line_truth.set_data(x_test[:n_truth], truth[:n_truth])
+        if n_truth > 0:
+            segs = [[(x_test[i], truth[i]), (x_test[i], fc[i])] for i in range(n_truth)]
+            err_collection.set_segments(segs)
+        else:
+            err_collection.set_segments([])
+
+        # Phase 5: leaderboard bars + numbers (0.85 .. 1.0)
+        lb_frac = _ease(max(0.0, min(1.0, (p - 0.85) / 0.12)))
+        base_bar.set_width(bar_axes_w * (win.rmse_baseline / bar_max) * lb_frac)
+        lgbm_bar.set_width(bar_axes_w * (win.rmse_lgbm / bar_max) * lb_frac)
+        base_num.set_text(f"{win.rmse_baseline * lb_frac:.2f}" if lb_frac > 0.05 else "")
+        lgbm_num.set_text(f"{win.rmse_lgbm * lb_frac:.2f}" if lb_frac > 0.05 else "")
+        lift_label.set_text(lift_text if lb_frac > 0.6 else "")
+
+        return [
+            line_train,
+            line_fc,
+            line_base,
+            line_truth,
+            err_collection,
+            cutoff_line,
+            train_mask,
+            test_mask,
+            cutoff_label,
+            base_bar,
+            lgbm_bar,
+            base_num,
+            lgbm_num,
+            lift_label,
+            caption,
+        ]
+
+    anim = FuncAnimation(fig, update, frames=n_frames, interval=int(1000 / fps), blit=False)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    writer = PillowWriter(fps=fps)
+    anim.save(str(out_path), writer=writer)
+    plt.close(fig)
+    return out_path
+
+
 # ----------------------------------------------------------- top-level driver
 
 
@@ -938,8 +1203,17 @@ def render_pipeline_viz(
     horizon: int = 28,
     n_windows: int = 3,
     train_context: int = 84,
-) -> tuple[Path, Path]:
-    """Build payload + write ``pipeline.svg`` and ``pipeline.html`` under ``out_dir``."""
+    gif: bool = True,
+    gif_fps: int = 12,
+    gif_duration: float = 12.0,
+) -> dict[str, Path]:
+    """Build payload + write ``pipeline.svg``, ``pipeline.html``, and (optionally)
+    ``pipeline.gif`` under ``out_dir``.
+
+    The GIF is opt-out because matplotlib + PillowWriter takes a few seconds and
+    inflates the output ~50-100x vs the SVG. Set ``gif=False`` for the fast path
+    (SVG + HTML only).
+    """
     payload = build_payload(
         model_dir=model_dir,
         long_path=long_path,
@@ -952,10 +1226,16 @@ def render_pipeline_viz(
     html_path = out_dir / "pipeline.html"
     svg_path.write_text(render_svg(payload))
     html_path.write_text(render_html(payload))
+    paths: dict[str, Path] = {"svg": svg_path, "html": html_path}
     logger.info(
         f"viz: hero={payload.hero_label}  "
         f"RMSE LGBM={payload.latest.rmse_lgbm:.2f}  Naive={payload.latest.rmse_baseline:.2f}"
     )
     logger.info(f"viz: wrote {svg_path} ({svg_path.stat().st_size / 1024:.1f} KB)")
     logger.info(f"viz: wrote {html_path} ({html_path.stat().st_size / 1024:.1f} KB)")
-    return svg_path, html_path
+    if gif:
+        gif_path = out_dir / "pipeline.gif"
+        render_gif(payload, gif_path, fps=gif_fps, duration=gif_duration)
+        logger.info(f"viz: wrote {gif_path} ({gif_path.stat().st_size / 1024:.1f} KB)")
+        paths["gif"] = gif_path
+    return paths
