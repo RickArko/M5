@@ -173,6 +173,36 @@ score-all: ## Score every CV artifact found in artifacts/ (cv_<name>.parquet)
 
 eval: cv-stats cv-lgbm score ## End-to-end: stats + lgbm CV, then score the merged report
 
+# ---- Load test (phase 1: local; phases 2-3 add GCP tier sweep) -----
+# Plan: docs/plans/api_loadtest.md. Generate the payload corpus once
+# (reads unique_ids from artifacts/cv_lgbm.parquet), then run locust
+# against a local `make serve` instance.
+
+LOADTEST_HOST    ?= http://localhost:8000
+LOADTEST_USERS   ?= 20
+LOADTEST_SPAWN   ?= 5
+LOADTEST_TIME    ?= 60s
+LOADTEST_PAYLOAD ?= loadtest/payloads/unique_ids.txt
+LOADTEST_CORPUS_N ?= 3000
+
+loadtest-payload: ## Build loadtest/payloads/unique_ids.txt from artifacts/cv_lgbm.parquet
+	@set -e; \
+	src=artifacts/cv_lgbm.parquet; \
+	[ -f "$$src" ] || { echo "$$src not found — run `make cv-lgbm` first." >&2; exit 1; }; \
+	mkdir -p loadtest/payloads; \
+	$(UV) run --group loadtest python -c "import pandas as pd; pd.read_parquet('$$src')['unique_id'].drop_duplicates().head($(LOADTEST_CORPUS_N)).to_csv('$(LOADTEST_PAYLOAD)', index=False, header=False)"; \
+	echo "==> wrote $(LOADTEST_PAYLOAD) ($$(wc -l < $(LOADTEST_PAYLOAD)) ids)"
+
+loadtest-local: ## Run locust against a local `make serve` (headless, csv → reports/loadtest/local_*)
+	@[ -f $(LOADTEST_PAYLOAD) ] || { echo "$(LOADTEST_PAYLOAD) not found — run `make loadtest-payload` first." >&2; exit 1; }
+	@mkdir -p reports/loadtest
+	M5_LOADTEST_PAYLOAD=$(LOADTEST_PAYLOAD) \
+	$(UV) run --group loadtest locust -f loadtest/locustfile.py --headless \
+	    -u $(LOADTEST_USERS) -r $(LOADTEST_SPAWN) -H $(LOADTEST_HOST) \
+	    --run-time $(LOADTEST_TIME) \
+	    --csv reports/loadtest/local \
+	    --html reports/loadtest/local.html
+
 # ---- Visualisation -------------------------------------------------
 # `make viz` reads the latest fitted artifact + long.parquet and renders
 # assets/pipeline.svg (auto-plays in README) + assets/pipeline.html
