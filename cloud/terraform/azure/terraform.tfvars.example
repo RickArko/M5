@@ -1,0 +1,20 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# Azure auth comes from `az login` or ARM_* env vars.
+
+location            = "eastus"
+resource_group_name = "rg-m5"
+ssh_public_key      = "ssh-ed25519 AAAA... your-comment"
+
+# Storage account — 3-24 chars, lowercase letters + digits, globally unique.
+storage_account_name = "m5artifacts12345"
+
+# ---- Optional: instance sizing ----------------------------------------
+# train_vm_size = "Standard_D8s_v5"     # 8 vCPU / 32 GB / ~$0.38/h
+# serve_vm_size = "Standard_B2s"        # 2 vCPU / 4 GB  / ~$30/mo
+
+# ---- Optional: tighten firewall ---------------------------------------
+# allowed_ssh_cidrs   = ["203.0.113.42/32"]
+# allowed_serve_cidrs = ["203.0.113.42/32"]
+
+# ---- Optional: serve-side API key -------------------------------------
+# serve_api_key = "long-random-string"

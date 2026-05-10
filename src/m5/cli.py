@@ -567,6 +567,56 @@ def score(
     logger.info(f"score: wrote {paths['md']} and {paths['html']}")
 
 
+@app.command()
+def viz(
+    model_dir: Path = typer.Option(
+        None,
+        help="Fitted artifact directory (default: artifacts/models/lgbm/latest).",
+    ),
+    long_path: Path = typer.Option(None, help="Path to the processed long parquet."),
+    out_dir: Path = typer.Option(None, help="Output directory (default: assets/)."),
+    horizon: int = typer.Option(28, help="Forecast horizon to visualise."),
+    n_windows: int = typer.Option(3, help="Rolling-origin CV windows to embed in the HTML."),
+    train_context: int = typer.Option(84, help="Trailing training-context days drawn before the cutoff."),
+    gif: bool = typer.Option(
+        True,
+        "--gif/--no-gif",
+        help="Also render assets/pipeline.gif (universal renderer support; ~50-100x larger than the SVG).",
+    ),
+    gif_fps: int = typer.Option(12, help="Frame rate for the GIF."),
+    gif_duration: float = typer.Option(12.0, help="GIF loop length, seconds."),
+) -> None:
+    """Render the M5 pipeline visualisation (animated SVG + interactive D3 HTML + GIF).
+
+    Loads the fitted serving artifact, picks a hero series, runs ``n_windows``
+    rolling-origin predictions, and writes:
+
+    - ``pipeline.svg``  — animated SVG (SMIL); plays in GitHub README and
+      modern browsers; non-SMIL viewers (VSCode preview etc.) see the static
+      final-frame composition.
+    - ``pipeline.html`` — standalone D3.js page; scrub through CV windows,
+      hover for per-day truth/forecast/baseline values.
+    - ``pipeline.gif``  — animated GIF; the universally-rendered fallback.
+    """
+    from m5.viz import render_pipeline_viz
+
+    set_global_seed()
+    md = model_dir or REPO_ROOT / "artifacts" / "models" / "lgbm" / "latest"
+    lp = long_path or SETTINGS.processed_dir / "long.parquet"
+    od = out_dir or REPO_ROOT / "assets"
+    render_pipeline_viz(
+        model_dir=md,
+        long_path=lp,
+        out_dir=od,
+        horizon=horizon,
+        n_windows=n_windows,
+        train_context=train_context,
+        gif=gif,
+        gif_fps=gif_fps,
+        gif_duration=gif_duration,
+    )
+
+
 def main() -> None:  # pragma: no cover
     app()
 

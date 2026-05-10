@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# GCP auth comes from `gcloud auth application-default login`.
+
+project_id     = "your-gcp-project-id"
+region         = "us-central1"
+zone           = "us-central1-a"
+ssh_public_key = "ssh-ed25519 AAAA... your-comment"
+
+# GCS bucket — globally unique.
+artifact_bucket_name = "m5-artifacts-yourname-12345"
+
+# ---- Optional: instance sizing ----------------------------------------
+# train_machine_type = "n2-standard-8"  # 8 vCPU / 32 GB / ~$0.39/h
+# serve_machine_type = "e2-medium"      # 2 vCPU / 4 GB  / ~$25/mo
+
+# ---- Optional: tighten firewall ---------------------------------------
+# allowed_ssh_cidrs   = ["203.0.113.42/32"]
+# allowed_serve_cidrs = ["203.0.113.42/32"]
+
+# ---- Optional: serve-side API key -------------------------------------
+# serve_api_key = "long-random-string"

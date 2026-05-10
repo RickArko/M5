@@ -1,0 +1,99 @@
+# M5 cloud targets — included by the top-level Makefile.
+#
+# All targets dispatch on PROVIDER (hetzner | aws | azure | gcp).
+# Variables override on the CLI:  make cloud-up PROVIDER=aws
+# or persistently in .env / shell:  export PROVIDER=hetzner
+#
+# Required tooling:  terraform >= 1.5
+# Recommended:       direnv (per-directory env loading)
+
+PROVIDER       ?= hetzner
+TF_DIR         := cloud/terraform/$(PROVIDER)
+TF             ?= terraform
+SSH_USER_HETZNER := root
+SSH_USER_AWS     := ubuntu
+SSH_USER_AZURE   := azureuser
+SSH_USER_GCP     := m5
+SSH_USER          = $(SSH_USER_$(shell echo $(PROVIDER) | tr a-z A-Z))
+
+.PHONY: cloud-help cloud-check cloud-init cloud-plan cloud-up cloud-down \
+        cloud-output cloud-status cloud-ssh-train cloud-ssh-serve \
+        cloud-train-up cloud-serve-up cloud-fmt cloud-validate cloud-validate-all
+
+cloud-help: ## Cloud target reference (PROVIDER={hetzner|aws|azure|gcp})
+	@printf '\nM5 cloud targets — PROVIDER=%s\n\n' "$(PROVIDER)"
+	@printf '  cloud-init           terraform init for the chosen provider\n'
+	@printf '  cloud-plan           terraform plan\n'
+	@printf '  cloud-up             terraform apply (full bring-up: train + serve VMs)\n'
+	@printf '  cloud-train-up       apply with create_serve=false (train only, ephemeral)\n'
+	@printf '  cloud-serve-up       apply with create_train=false (serve only, persistent)\n'
+	@printf '  cloud-down           terraform destroy (tears everything down)\n'
+	@printf '  cloud-output         terraform output (IPs, ssh commands, serve URL)\n'
+	@printf '  cloud-status         curl /healthz on the serve VM\n'
+	@printf '  cloud-ssh-train      ssh into the train VM\n'
+	@printf '  cloud-ssh-serve      ssh into the serve VM\n'
+	@printf '  cloud-fmt            terraform fmt -recursive cloud/terraform/\n'
+	@printf '  cloud-validate       terraform validate (current PROVIDER)\n'
+	@printf '  cloud-validate-all   terraform validate (all four providers)\n\n'
+	@printf 'See cloud/README.md for setup, credentials, and cost notes.\n\n'
+
+cloud-check:
+	@command -v $(TF) >/dev/null || { \
+	    echo "ERROR: terraform not installed. Install: https://developer.hashicorp.com/terraform/install"; exit 1; }
+	@test -d "$(TF_DIR)" || { \
+	    echo "ERROR: $(TF_DIR) does not exist. PROVIDER must be one of: hetzner, aws, azure, gcp"; exit 1; }
+
+cloud-init: cloud-check ## terraform init for $(PROVIDER)
+	cd $(TF_DIR) && $(TF) init
+
+cloud-plan: cloud-check ## terraform plan for $(PROVIDER)
+	cd $(TF_DIR) && $(TF) plan
+
+cloud-up: cloud-check ## terraform apply (full bring-up — train + serve)
+	cd $(TF_DIR) && $(TF) apply -auto-approve
+
+cloud-train-up: cloud-check ## Spin up only the train VM (create_serve=false)
+	cd $(TF_DIR) && $(TF) apply -auto-approve -var='create_serve=false'
+
+cloud-serve-up: cloud-check ## Spin up only the serve VM (create_train=false)
+	cd $(TF_DIR) && $(TF) apply -auto-approve -var='create_train=false'
+
+cloud-down: cloud-check ## terraform destroy
+	cd $(TF_DIR) && $(TF) destroy -auto-approve
+
+cloud-output: cloud-check ## Print all terraform outputs
+	@cd $(TF_DIR) && $(TF) output
+
+cloud-status: cloud-check ## Curl /healthz on the serve VM
+	@cd $(TF_DIR) && url=$$($(TF) output -raw serve_url 2>/dev/null) && \
+	    if [ -n "$$url" ] && [ "$$url" != "null" ]; then \
+	        echo "GET $$url/healthz"; \
+	        curl --fail --silent --max-time 5 "$$url/healthz" || echo "(no response)"; \
+	    else \
+	        echo "no serve VM up. apply with PROVIDER=$(PROVIDER) cloud-up first."; \
+	    fi
+
+cloud-ssh-train: cloud-check ## SSH into the train VM
+	@cd $(TF_DIR) && ip=$$($(TF) output -raw train_public_ip 2>/dev/null || $(TF) output -raw train_ipv4 2>/dev/null) && \
+	    test -n "$$ip" && test "$$ip" != "null" || { echo "no train VM up"; exit 1; }; \
+	    ssh $(SSH_USER)@$$ip
+
+cloud-ssh-serve: cloud-check ## SSH into the serve VM
+	@cd $(TF_DIR) && ip=$$($(TF) output -raw serve_public_ip 2>/dev/null || $(TF) output -raw serve_ipv4 2>/dev/null) && \
+	    test -n "$$ip" && test "$$ip" != "null" || { echo "no serve VM up"; exit 1; }; \
+	    ssh $(SSH_USER)@$$ip
+
+cloud-fmt: ## terraform fmt -recursive on all provider modules
+	@command -v $(TF) >/dev/null || { echo "ERROR: terraform not installed"; exit 1; }
+	$(TF) fmt -recursive cloud/terraform
+
+cloud-validate: cloud-check ## terraform validate for $(PROVIDER) only
+	cd $(TF_DIR) && $(TF) init -backend=false >/dev/null && $(TF) validate
+
+cloud-validate-all: ## terraform validate for hetzner, aws, azure, gcp
+	@command -v $(TF) >/dev/null || { echo "ERROR: terraform not installed"; exit 1; }
+	@for p in hetzner aws azure gcp; do \
+	    echo "==> validating $$p"; \
+	    (cd cloud/terraform/$$p && $(TF) init -backend=false >/dev/null && $(TF) validate) || exit 1; \
+	done
+	@echo "==> all four providers validated"

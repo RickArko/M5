@@ -1,0 +1,17 @@
+[Unit]
+Description=M5 serve VM bootstrap (idempotent — runs cloud-init/serve.sh)
+Documentation=https://github.com/RickArko/M5/tree/main/cloud
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/m5-cloud.env
+ExecStart=/srv/M5/cloud/cloud-init/serve.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,109 @@
+# Cursor system prompt for the M5 forecasting repo.
+# Authoritative agent guide: AGENTS.md (repo root).
+# Extensive contributor guide for agents: docs/developer/AGENTS.md.
+# Token-optimized full repo context: AI-CONTEXT.md.
+
+You are working on a reproducible Kaggle M5 Forecasting – Accuracy
+solution: 28-day daily forecast for 30,490 Walmart item × store series.
+Stack: Python 3.12, deps managed by uv, Nixtla (statsforecast,
+mlforecast, hierarchicalforecast) + LightGBM, FastAPI for serving. The
+Makefile is the entrypoint (Linux / macOS / WSL only).
+
+## Hard rules — do not violate
+
+1. **Reproducibility is a contract.** Every cv / forecast / train entry
+   point calls set_global_seed() before fitting. LightGBM uses
+   deterministic=True, force_row_wise=True, seed=SETTINGS.seed. Same
+   inputs must produce the same WRMSSE. Don't add randomness without
+   threading it through set_global_seed.
+2. **RAM-constrained dev hardware.** Never run `make prep` or
+   `make cv-*` against the full 30,490 series locally. Cap with
+   M5_N_SERIES=200, M5_LAST_N_DAYS=120, M5_N_WINDOWS=1. Full runs are
+   for cloud / remote nodes only.
+3. **The Nixtla schema is fixed.** unique_id (string
+   "{item_id}_{store_id}"), ds (datetime64[ns]), y (float32). Do NOT
+   reintroduce `id` or `_evaluation` columns — they were intentionally
+   stripped.
+4. **The feature menu is deliberately small.** Adding a feature column
+   requires a CV diff in the PR body. Prefer extending mlforecast lag /
+   rolling configs in src/m5/models/lgbm.py over piling onto
+   src/m5/features.py.
+5. **data/processed/long.parquet is the only handoff** between prep and
+   modelling. Don't write parallel intermediate parquets.
+6. **Don't hand-edit AI-CONTEXT.md** — it's regenerated via the
+   /ai-condense skill. Manual edits get clobbered.
+7. **Don't hand-edit uv.lock** — use `uv add <pkg>` or
+   `uv sync --upgrade-package <pkg>`.
+8. **Don't bypass pre-commit hooks** (--no-verify). If a hook fails,
+   fix the issue and create a new commit.
+9. **Don't push or open PRs without explicit user confirmation.**
+
+## Commands
+
+Inner-loop (use these in tight feedback loops):
+
+- `make test-smoke` (~1 s) — imports, CLI help, package metadata
+- `make test-fast` (~5 s) — smoke + unit (toy fixture)
+- `make typecheck` (~3 s) — mypy on src/m5
+- `make lint` — ruff check
+- `make check` — lint + typecheck + test (CI entry point; run before PR)
+
+Capped CV (1–2 min, fits in RAM):
+
+```
+M5_N_SERIES=500 M5_LAST_N_DAYS=200 M5_N_WINDOWS=1 make cv-lgbm
+```
+
+CLI surface: `uv run m5 <download|prep|cv|forecast|train|serve>`.
+
+## Architecture
+
+```
+src/m5/
+  config.py     SETTINGS (frozen dataclass, env-driven). Single source of truth.
+  data.py       load + melt → Nixtla long frame.
+  features.py   date / snap / event-flag / price-norm features.
+  evaluation.py WRMSSE: compute_components + wrmsse / wrmsse_for_models.
+  hierarchy.py  12-level M5 spec around hierarchicalforecast.
+  cv.py         stats_cv / lgbm_cv / hier_cv. Always seeds first.
+  models/stats.py        Theta + AutoETS + SeasonalNaive @ season_length=7.
+  models/lgbm.py         MLForecast + LightGBM (Tweedie, deterministic).
+  models/hierarchical.py Theta base + BU / TD / MinT reconcilers.
+  cli.py        typer app: download | prep | cv | forecast | train | serve.
+  serve/        FastAPI service.
+```
+
+## Test guidance
+
+- Tests depend on `tests/conftest.py::toy_long` (3 series × 200 days,
+  deterministic). Don't synthesize ad-hoc fixtures.
+- Tiers: smoke / unit / integration / slow (markers in pyproject.toml).
+- Inner loop: `make test-fast` after every edit.
+
+## When extending
+
+- **New feature:** add to src/m5/features.py, include in
+  build_feature_frame, AND add to keep_cols in BOTH
+  src/m5/models/lgbm.py::fit_predict_lgbm AND src/m5/cv.py::lgbm_cv. If
+  any of those steps are skipped, the feature silently no-ops at
+  training time.
+- **New model:** src/m5/models/<x>.py with build_<x>_forecaster +
+  fit_predict_<x>; register in src/m5/models/__init__.py; add <x>_cv
+  runner in src/m5/cv.py (must call set_global_seed() first); wire into
+  src/m5/cli.py and Makefile.
+
+## Code style
+
+- Python 3.12 (modern syntax, PEP 604 unions).
+- Ruff: line-length 110, target-version py312.
+- Mypy strict on src/m5 only (notebooks and tests are unchecked).
+- No emojis in code or comments unless explicitly asked.
+- Comments only for non-obvious "why" — identifiers carry the "what".
+- Don't add features, refactor, or abstract beyond the task.
+
+## See also
+
+Read AGENTS.md and docs/developer/AGENTS.md for the full contract,
+per-harness setup, the standard agent workflow loop, worked examples,
+and PR conventions. AI-CONTEXT.md is the token-optimized full repo
+summary — drop it into any agent's context for instant grounding.

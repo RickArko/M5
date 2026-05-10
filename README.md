@@ -8,6 +8,20 @@ Goal: get close to world-class with as few features as possible — three model
 families (Theta, AutoETS, LightGBM) on a deliberately small feature menu, with
 reproducible rolling-origin cross-validation.
 
+![M5 pipeline — fit, predict, score (animated GIF)](assets/pipeline.gif)
+
+> Regenerate with `make viz` (after `make train`) — reads
+> `artifacts/models/lgbm/latest/`, picks a hero series, runs rolling-origin
+> predictions, and writes three files:
+>
+> | File | When to use |
+> |---|---|
+> | [`assets/pipeline.gif`](assets/pipeline.gif) (the animation above) | Universal — plays in every renderer (README, VSCode preview, PDF). |
+> | [`assets/pipeline.svg`](assets/pipeline.svg) | Crisp / scalable. Plays via SMIL on GitHub web + modern browsers; non-SMIL viewers see the static final-frame composition. |
+> | [`assets/pipeline.html`](assets/pipeline.html) | Interactive D3.js page — scrub through CV windows, hover for per-day truth / forecast / baseline values. Open in a browser. |
+>
+> Skip the GIF (faster, no matplotlib pass) with `uv run m5 viz --no-gif`.
+
 ## Stack
 
 - **Python 3.12**, dependency-managed by [`uv`](https://docs.astral.sh/uv/)
@@ -350,7 +364,26 @@ Full list: [`docs/developer/TROUBLESHOOTING.md`](docs/developer/TROUBLESHOOTING.
 - [`docs/developer/SETUP.md`](docs/developer/SETUP.md) — first-time install (WSL, uv, VSCode).
 - [`docs/developer/DEVELOPMENT.md`](docs/developer/DEVELOPMENT.md) — daily workflow, testing, debugging.
 - [`docs/developer/ARCHITECTURE.md`](docs/developer/ARCHITECTURE.md) — why this stack, package layout, data flow.
+- [`docs/developer/AGENTS.md`](docs/developer/AGENTS.md) — extensive guide for programmers driving an AI coding agent (Claude Code, Codex CLI, Gemini CLI, Aider, …).
 - [`docs/developer/TROUBLESHOOTING.md`](docs/developer/TROUBLESHOOTING.md) — common errors.
+
+### Working with AI coding agents
+
+The repo follows the [agents.md](https://agents.md) convention so any
+modern agentic CLI gets a useful system prompt for free:
+
+| File | Used by |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | OpenAI Codex CLI, opencode, factory.ai droids (auto). Aider via `--read AGENTS.md`. |
+| [`CLAUDE.md`](CLAUDE.md) | Claude Code (auto). |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI (auto). |
+| [`.cursorrules`](.cursorrules) | Cursor (auto, prepended to chat). |
+| [`.aider.conf.yml`](.aider.conf.yml) | Aider (auto, preloads `AGENTS.md` + `AI-CONTEXT.md`). |
+| [`AI-CONTEXT.md`](AI-CONTEXT.md) | Drop into any agent's context for token-optimized full repo summary. |
+
+Per-harness setup, the standard agent workflow loop, capped CV recipes,
+and PR conventions live in
+[`docs/developer/AGENTS.md`](docs/developer/AGENTS.md).
 
 ## Approach
 

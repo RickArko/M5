@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> Shares conventions with [`AGENTS.md`](AGENTS.md) (the cross-tool agent
+> contract used by Codex / opencode / Aider) and
+> [`docs/developer/AGENTS.md`](docs/developer/AGENTS.md) (the extensive
+> agent contributor guide — per-harness setup, workflow, examples). If
+> the three ever disagree, this file wins for Claude Code; otherwise
+> keep them in sync.
+
 ## Repo identity
 
 Reproducible Kaggle **M5 Forecasting – Accuracy** solution: 28-day daily forecast for 30,490 Walmart item × store series. Stack: Nixtla (`statsforecast`, `mlforecast`, `utilsforecast`, `hierarchicalforecast`, `datasetsforecast`) + LightGBM, glued by a small `m5` Python package and a Typer CLI. Python **3.12** only, deps managed by **`uv`**, entrypoint is the `Makefile` (Linux/macOS/WSL — no PowerShell path).

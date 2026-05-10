@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# AWS auth comes from ~/.aws/credentials, AWS_PROFILE, or instance role.
+
+region         = "us-east-1"
+ssh_public_key = "ssh-ed25519 AAAA... your-comment"
+
+# S3 bucket — must be globally unique.
+artifact_bucket_name = "m5-artifacts-yourname-12345"
+
+# ---- Optional: instance sizing ----------------------------------------
+# train_instance_type = "c7i.2xlarge"   # 8 vCPU / 16 GB / ~$0.36/h
+# serve_instance_type = "t3.medium"     # 2 vCPU / 4 GB  / ~$30/mo
+
+# ---- Optional: tighten firewall ---------------------------------------
+# allowed_ssh_cidrs   = ["203.0.113.42/32"]
+# allowed_serve_cidrs = ["203.0.113.42/32"]
+
+# ---- Optional: serve-side API key -------------------------------------
+# serve_api_key = "long-random-string"

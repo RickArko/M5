@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>M5 pipeline — fit · predict · score</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+      --muted: #8b949e; --train: #c9d1d9; --truth: #58a6ff; --fc: #f778ba;
+      --base: #d29922; --err: #f85149; --ok: #3fb950;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de; --fg: #1f2328;
+        --muted: #656d76; --train: #57606a; --truth: #0969da; --fc: #bf3989;
+        --base: #9a6700; --err: #cf222e; --ok: #1a7f37;
+      }
+    }
+    body { background: var(--bg); color: var(--fg); margin: 0;
+           font: 14px ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+    p.lead { color: var(--muted); margin: 0 0 18px; }
+    .panel { background: var(--panel); border: 1px solid var(--border);
+             border-radius: 8px; padding: 14px 18px; }
+    .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+                margin: 14px 0; }
+    .controls button { background: var(--panel); color: var(--fg);
+                       border: 1px solid var(--border); border-radius: 6px;
+                       padding: 6px 14px; cursor: pointer; font: inherit; }
+    .controls button:hover { border-color: var(--fc); }
+    .controls .group { display: flex; align-items: center; gap: 8px; }
+    .controls label { color: var(--muted); }
+    .meta-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+                margin-top: 14px; }
+    .meta-row .cell { background: var(--panel); border: 1px solid var(--border);
+                      border-radius: 6px; padding: 8px 12px; }
+    .meta-row .cell .k { color: var(--muted); font-size: 11px;
+                         text-transform: uppercase; letter-spacing: .05em; }
+    .meta-row .cell .v { font-size: 16px; font-weight: 600; margin-top: 2px; }
+    svg .axis path, svg .axis line { stroke: var(--border); }
+    svg .axis text { fill: var(--muted); }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px;
+                   color: var(--muted); font-family: ui-monospace, SFMono-Regular, monospace;
+                   font-size: 12px; }
+    .legend i { width: 14px; height: 0; border-top: 3px solid var(--train); }
+    .tooltip { position: absolute; pointer-events: none; background: var(--panel);
+               border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+               font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;
+               opacity: 0; transition: opacity 80ms; }
+    a { color: var(--truth); }
+    code { background: var(--panel); padding: 1px 6px; border-radius: 4px;
+           border: 1px solid var(--border); font-size: 12px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>M5 pipeline · fit · predict · score</h1>
+  <p class="lead" id="lead"></p>
+
+  <div class="legend">
+    <span><i style="border-color:var(--train)"></i> training context</span>
+    <span><i style="border-color:var(--truth)"></i> held-out truth</span>
+    <span><i style="border-color:var(--fc)"></i> LightGBM forecast</span>
+    <span><i style="border-color:var(--base);border-style:dashed"></i> Seasonal Naive(7) baseline</span>
+  </div>
+
+  <div class="panel">
+    <svg id="chart" viewBox="0 0 1040 460" preserveAspectRatio="xMidYMid meet"
+         style="width:100%;height:auto;display:block"></svg>
+  </div>
+
+  <div class="controls">
+    <div class="group">
+      <button id="play">▶ Play</button>
+      <button id="reset">↺ Restart</button>
+    </div>
+    <div class="group">
+      <label for="window">CV window</label>
+      <select id="window"></select>
+    </div>
+    <div class="group">
+      <label>phase</label>
+      <input id="scrub" type="range" min="0" max="1000" value="0" style="width:240px"/>
+      <span id="phase-name" style="color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <div class="meta-row">
+    <div class="cell"><div class="k">hero series</div><div class="v" id="m-hero"></div></div>
+    <div class="cell"><div class="k">cutoff</div><div class="v" id="m-cutoff"></div></div>
+    <div class="cell"><div class="k">RMSE · LGBM</div><div class="v" id="m-lgbm" style="color:var(--fc)"></div></div>
+    <div class="cell"><div class="k">RMSE · Seasonal Naive</div><div class="v" id="m-base" style="color:var(--base)"></div></div>
+  </div>
+
+  <p class="lead" style="margin-top:18px">
+    Static animated preview lives at
+    <code>assets/pipeline.svg</code>. Regenerate with
+    <code>uv run m5 viz</code> after <code>make train</code>.
+  </p>
+</main>
+<div class="tooltip" id="tip"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const PAYLOAD = {"hero_id":"FOODS_3_634_WI_1","hero_label":"FOODS \u00b7 3 \u00b7 634 \u00b7 WI \u00b7 1","train_dates":["2016-02-01","2016-02-02","2016-02-03","2016-02-04","2016-02-05","2016-02-06","2016-02-07","2016-02-08","2016-02-09","2016-02-10","2016-02-11","2016-02-12","2016-02-13","2016-02-14","2016-02-15","2016-02-16","2016-02-17","2016-02-18","2016-02-19","2016-02-20","2016-02-21","2016-02-22","2016-02-23","2016-02-24","2016-02-25","2016-02-26","2016-02-27","2016-02-28","2016-02-29","2016-03-01","2016-03-02","2016-03-03","2016-03-04","2016-03-05","2016-03-06","2016-03-07","2016-03-08","2016-03-09","2016-03-10","2016-03-11","2016-03-12","2016-03-13","2016-03-14","2016-03-15","2016-03-16","2016-03-17","2016-03-18","2016-03-19","2016-03-20","2016-03-21","2016-03-22","2016-03-23","2016-03-24","2016-03-25","2016-03-26","2016-03-27","2016-03-28","2016-03-29","2016-03-30","2016-03-31","2016-04-01","2016-04-02","2016-04-03","2016-04-04","2016-04-05","2016-04-06","2016-04-07","2016-04-08","2016-04-09","2016-04-10","2016-04-11","2016-04-12","2016-04-13","2016-04-14","2016-04-15","2016-04-16","2016-04-17","2016-04-18","2016-04-19","2016-04-20","2016-04-21","2016-04-22","2016-04-23","2016-04-24"],"train_y":[8.0,5.0,2.0,7.0,13.0,33.0,27.0,2.0,6.0,2.0,12.0,12.0,7.0,6.0,1.0,4.0,7.0,1.0,10.0,12.0,5.0,4.0,3.0,6.0,4.0,3.0,10.0,6.0,2.0,4.0,3.0,5.0,5.0,10.0,7.0,2.0,1.0,4.0,6.0,4.0,4.0,3.0,2.0,6.0,2.0,2.0,4.0,11.0,5.0,4.0,1.0,5.0,8.0,12.0,11.0,6.0,4.0,1.0,2.0,5.0,4.0,14.0,6.0,6.0,5.0,4.0,10.0,5.0,11.0,4.0,4.0,5.0,1.0,4.0,6.0,14.0,7.0,5.0,1.0,9.0,4.0,9.0,5.0,7.0],"windows":[{"cutoff":"2016-02-28","forecast":[3.998888568113655,3.6181255204900578,4.277400323185143,4.601721833142784,7.113013378304417,9.70456290913029,7.787123007756299,3.6663795146423737,3.8402946807315335,4.203008823111736,4.505800097414176,6.711268462750284,8.89594568231642,7.218746350711806,3.6459836695241625,3.9964980271767154,4.040607788398188,4.0031467785175545,6.694225243433304,8.389277317110425,7.248727039553051,3.6169498251407073,3.665293912073895,3.8840437500625637,3.957701256637642,7.487673731239052,10.259993810238727,6.9983484572946155],"baseline":[4.0,3.0,6.0,4.0,3.0,10.0,6.0,4.0,3.0,6.0,4.0,3.0,10.0,6.0,4.0,3.0,6.0,4.0,3.0,10.0,6.0,4.0,3.0,6.0,4.0,3.0,10.0,6.0],"truth":[2.0,4.0,3.0,5.0,5.0,10.0,7.0,2.0,1.0,4.0,6.0,4.0,4.0,3.0,2.0,6.0,2.0,2.0,4.0,11.0,5.0,4.0,1.0,5.0,8.0,12.0,11.0,6.0],"rmse_lgbm":2.3460709036280813,"rmse_baseline":2.809422919899591},{"cutoff":"2016-03-27","forecast":[3.252762805961514,3.553581373536505,3.616805085167058,3.9098580114771897,6.571416784165209,8.493016638176185,7.245495623470184,3.3661299981003503,3.6359122434703726,3.8008643534176816,4.327741286082709,6.298278762442184,8.519558051199812,7.1905005870626475,3.559185910053943,3.9058307345624343,3.7394567857926733,3.9915820074635238,6.496248999493191,8.454230981801672,7.46305605792107,3.7171250042237256,3.830283965516229,3.980945959117975,4.547163774672684,6.494148701107309,8.266934086742598,7.348212625237779],"baseline":[4.0,1.0,5.0,8.0,12.0,11.0,6.0,4.0,1.0,5.0,8.0,12.0,11.0,6.0,4.0,1.0,5.0,8.0,12.0,11.0,6.0,4.0,1.0,5.0,8.0,12.0,11.0,6.0],"truth":[4.0,1.0,2.0,5.0,4.0,14.0,6.0,6.0,5.0,4.0,10.0,5.0,11.0,4.0,4.0,5.0,1.0,4.0,6.0,14.0,7.0,5.0,1.0,9.0,4.0,9.0,5.0,7.0],"rmse_lgbm":2.677511754634072,"rmse_baseline":3.494894235064305},{"cutoff":"2016-04-24","forecast":[3.873187268343926,3.6689021344472326,3.84875842014863,3.955685022204612,5.81833571932449,8.004724902031752,7.471432626960602,3.950628767881592,4.012947133885788,4.168243802856386,4.7081723262094775,6.752648772773923,8.410487851716493,6.8779950314694025,4.0847361553870085,4.054084153876311,4.092530304891763,4.429511450486576,6.255194173763577,8.351445437681875,8.291475753287306,3.8541450333587974,3.8946149349141397,4.360494277365563,4.269698209648419,6.934747460243181,8.25210908053066,7.944129472386242],"baseline":[5.0,1.0,9.0,4.0,9.0,5.0,7.0,5.0,1.0,9.0,4.0,9.0,5.0,7.0,5.0,1.0,9.0,4.0,9.0,5.0,7.0,5.0,1.0,9.0,4.0,9.0,5.0,7.0],"truth":[5.0,3.0,2.0,4.0,3.0,8.0,7.0,5.0,3.0,9.0,4.0,6.0,3.0,10.0,4.0,5.0,5.0,3.0,8.0,10.0,6.0,3.0,4.0,1.0,5.0,10.0,11.0,3.0],"rmse_lgbm":2.2959871488177046,"rmse_baseline":3.359421718944242}],"metadata":{"training_cutoff":"2016-05-22","n_series":30490,"n_rows":12189181,"lags":[7,14,28],"rolling_windows":[7,28],"horizon":28,"n_windows":3,"framework":"mlforecast","framework_version":"1.0.31","lightgbm_version":"4.6.0","git_sha":"0b8c188"}};
+
+const W = 1040, H = 460;
+const M = { top: 30, right: 30, bottom: 36, left: 50 };
+const innerW = W - M.left - M.right;
+const innerH = H - M.top - M.bottom;
+
+const svg = d3.select("#chart");
+const root = svg.append("g").attr("transform", `translate(${M.left},${M.top})`);
+
+document.getElementById("lead").textContent =
+  `${PAYLOAD.metadata.n_series.toLocaleString()} series · ` +
+  `LightGBM (Tweedie) trained @ ${PAYLOAD.metadata.training_cutoff} · ` +
+  `lags ${PAYLOAD.metadata.lags.join("/")} · h=${PAYLOAD.metadata.horizon}`;
+
+document.getElementById("m-hero").textContent = PAYLOAD.hero_label;
+
+// Window picker
+const wsel = document.getElementById("window");
+PAYLOAD.windows.forEach((w, i) => {
+  const opt = document.createElement("option");
+  opt.value = i; opt.textContent = `${w.cutoff}  (RMSE LGBM ${w.rmse_lgbm.toFixed(2)})`;
+  wsel.appendChild(opt);
+});
+wsel.value = PAYLOAD.windows.length - 1;
+
+const PHASES = [
+  { name: "context",  start: 0.00, end: 0.18, caption: "Trailing training context" },
+  { name: "split",    start: 0.18, end: 0.32, caption: "Rolling-origin split (h=28)" },
+  { name: "features", start: 0.32, end: 0.50, caption: "Build features at the cutoff" },
+  { name: "predict",  start: 0.50, end: 0.72, caption: "Predict 28 days ahead" },
+  { name: "score",    start: 0.72, end: 1.00, caption: "Score against held-out truth" },
+];
+
+function ease(t) { return t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t); }
+function frac(p, ph) { return ease((p - ph.start) / (ph.end - ph.start)); }
+
+function buildSeries(winIdx) {
+  const w = PAYLOAD.windows[winIdx];
+  const train = PAYLOAD.train_y.map((y, i) => ({ i, y, kind: "train" }));
+  const offset = train.length;
+  const test = w.truth.map((y, i) => ({ i: offset + i, y, kind: "truth" }));
+  const fc = w.forecast.map((y, i) => ({ i: offset + i, y, kind: "fc" }));
+  const base = w.baseline.map((y, i) => ({ i: offset + i, y, kind: "base" }));
+  const yMax = Math.max(...train.map(d => d.y), ...test.map(d => d.y),
+                         ...fc.map(d => d.y), ...base.map(d => d.y), 1) * 1.15;
+  return { w, train, test, fc, base, offset, total: offset + w.truth.length, yMax };
+}
+
+let state = buildSeries(+wsel.value);
+let phaseProgress = 0;     // 0..1 across phases
+let playing = false;
+let raf = null;
+let t0 = 0;
+const PERIOD = 14000;      // ms per loop
+
+const x = d3.scaleLinear();
+const y = d3.scaleLinear();
+
+function rescale(s) {
+  x.domain([0, s.total - 1]).range([0, innerW]);
+  y.domain([0, s.yMax]).range([innerH, 0]);
+}
+
+function setupAxes() {
+  root.selectAll(".axis").remove();
+  rescale(state);
+  const xAxis = d3.axisBottom(x)
+    .ticks(8)
+    .tickFormat(i => {
+      const idx = Math.round(i);
+      if (idx < state.offset) {
+        return PAYLOAD.train_dates[idx] ? PAYLOAD.train_dates[idx].slice(5) : "";
+      }
+      const k = idx - state.offset;
+      return state.w.cutoff && k >= 0 ? `+${k}d` : "";
+    });
+  const yAxis = d3.axisLeft(y).ticks(5);
+  root.append("g").attr("class","axis").attr("transform",`translate(0,${innerH})`).call(xAxis);
+  root.append("g").attr("class","axis").call(yAxis);
+}
+
+const lineGen = d3.line().x(d => x(d.i)).y(d => y(d.y)).curve(d3.curveMonotoneX);
+
+function ensure(sel, tag, cls) {
+  let el = sel.select("." + cls);
+  if (el.empty()) el = sel.append(tag).attr("class", cls);
+  return el;
+}
+
+function draw() {
+  const ph = PHASES.findLast ? PHASES.findLast(p => phaseProgress >= p.start) || PHASES[0]
+                              : (function() { let last = PHASES[0]; for (const p of PHASES) if (phaseProgress >= p.start) last = p; return last; })();
+  document.getElementById("phase-name").textContent = ph.caption;
+
+  // Train mask (left) + test mask (right)
+  const cutX = x(state.offset - 1);
+  const trainMaskOpacity = phaseProgress > 0.18 ? 0.04 : 0;
+  const testMaskOpacity  = phaseProgress > 0.18 ? 0.07 : 0;
+  ensure(root, "rect", "mask-train")
+    .attr("x", 0).attr("y", 0)
+    .attr("width", cutX).attr("height", innerH)
+    .attr("fill", "var(--truth)").attr("opacity", trainMaskOpacity);
+  ensure(root, "rect", "mask-test")
+    .attr("x", cutX).attr("y", 0)
+    .attr("width", Math.max(0, innerW - cutX)).attr("height", innerH)
+    .attr("fill", "var(--fc)").attr("opacity", testMaskOpacity);
+
+  // Cutoff line
+  ensure(root, "line", "cutoff")
+    .attr("x1", cutX).attr("x2", cutX).attr("y1", -6).attr("y2", innerH + 6)
+    .attr("stroke", "var(--fc)").attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "4 4")
+    .attr("opacity", phaseProgress > 0.18 ? 1 : 0);
+
+  // Train line — reveal by clipping width
+  const trainCtx = state.train;
+  const trainFrac = ease(Math.min(1, phaseProgress / 0.18));
+  ensure(root, "path", "train")
+    .datum(trainCtx)
+    .attr("fill", "none").attr("stroke", "var(--train)").attr("stroke-width", 1.6)
+    .attr("d", lineGen)
+    .attr("stroke-dasharray", null);
+  // Mask via clip rect
+  let trainClip = root.select("#clip-train");
+  if (trainClip.empty()) {
+    trainClip = root.append("clipPath").attr("id", "clip-train").append("rect")
+      .attr("y", -6).attr("height", innerH + 12);
+  } else {
+    trainClip = trainClip.select("rect");
+  }
+  trainClip.attr("x", 0).attr("width", cutX * trainFrac);
+  root.select(".train").attr("clip-path", "url(#clip-train)");
+
+  // Forecast + baseline — reveal between predict phase
+  const fcFrac = ease(Math.max(0, Math.min(1, (phaseProgress - 0.50) / 0.22)));
+  ensure(root, "path", "fc")
+    .datum(state.fc)
+    .attr("fill", "none").attr("stroke", "var(--fc)").attr("stroke-width", 2.2)
+    .attr("stroke-linecap", "round")
+    .attr("d", lineGen);
+  ensure(root, "path", "base")
+    .datum(state.base)
+    .attr("fill", "none").attr("stroke", "var(--base)").attr("stroke-width", 1.6)
+    .attr("stroke-dasharray", "4 3")
+    .attr("d", lineGen);
+  let fcClip = root.select("#clip-fc");
+  if (fcClip.empty()) {
+    fcClip = root.append("clipPath").attr("id", "clip-fc").append("rect")
+      .attr("y", -6).attr("height", innerH + 12);
+  } else { fcClip = fcClip.select("rect"); }
+  fcClip.attr("x", cutX).attr("width", (innerW - cutX) * fcFrac);
+  root.select(".fc").attr("clip-path", "url(#clip-fc)");
+  root.select(".base").attr("clip-path", "url(#clip-fc)");
+
+  // Truth + error bars — score phase
+  const truthFrac = ease(Math.max(0, Math.min(1, (phaseProgress - 0.72) / 0.20)));
+  ensure(root, "path", "truth")
+    .datum(state.test)
+    .attr("fill", "none").attr("stroke", "var(--truth)").attr("stroke-width", 2)
+    .attr("stroke-linecap", "round")
+    .attr("d", lineGen);
+  let truthClip = root.select("#clip-truth");
+  if (truthClip.empty()) {
+    truthClip = root.append("clipPath").attr("id", "clip-truth").append("rect")
+      .attr("y", -6).attr("height", innerH + 12);
+  } else { truthClip = truthClip.select("rect"); }
+  truthClip.attr("x", cutX).attr("width", (innerW - cutX) * truthFrac);
+  root.select(".truth").attr("clip-path", "url(#clip-truth)");
+
+  // Error bars — vertical lines from truth to forecast at each test step
+  const bars = root.selectAll(".err").data(state.test, d => d.i);
+  bars.exit().remove();
+  bars.enter().append("line").attr("class", "err")
+        .attr("stroke", "var(--err)").attr("stroke-width", 1.4).attr("opacity", 0.55)
+      .merge(bars)
+        .attr("x1", d => x(d.i)).attr("x2", d => x(d.i))
+        .attr("y1", d => y(d.y))
+        .attr("y2", (_, i) => y(state.fc[i].y))
+        .attr("opacity", truthFrac > 0.4 ? 0.55 * truthFrac : 0);
+
+  // Hover-friendly invisible rectangle for tooltip
+  ensure(root, "rect", "hover")
+    .attr("x", 0).attr("y", 0).attr("width", innerW).attr("height", innerH)
+    .attr("fill", "transparent")
+    .on("mousemove", function(ev) {
+      const [mx] = d3.pointer(ev, this);
+      const i = Math.max(0, Math.min(state.total - 1, Math.round(x.invert(mx))));
+      const off = state.offset;
+      const tip = document.getElementById("tip");
+      let html;
+      if (i < off) {
+        html = `<b>train</b> · ${PAYLOAD.train_dates[i]}<br/>y = ${state.train[i].y.toFixed(2)}`;
+      } else {
+        const k = i - off;
+        html = `<b>+${k}d</b> after cutoff<br/>` +
+               `truth = ${state.test[k].y.toFixed(2)}<br/>` +
+               `LGBM = ${state.fc[k].y.toFixed(2)}<br/>` +
+               `Naive = ${state.base[k].y.toFixed(2)}`;
+      }
+      tip.innerHTML = html;
+      tip.style.opacity = 1;
+      tip.style.left = (ev.pageX + 14) + "px";
+      tip.style.top = (ev.pageY - 10) + "px";
+    })
+    .on("mouseleave", () => { document.getElementById("tip").style.opacity = 0; });
+}
+
+function updateMetrics() {
+  document.getElementById("m-cutoff").textContent = state.w.cutoff;
+  document.getElementById("m-lgbm").textContent = state.w.rmse_lgbm.toFixed(2);
+  document.getElementById("m-base").textContent = state.w.rmse_baseline.toFixed(2);
+}
+
+function tick(now) {
+  if (!playing) return;
+  if (!t0) t0 = now;
+  phaseProgress = ((now - t0) % PERIOD) / PERIOD;
+  document.getElementById("scrub").value = Math.round(phaseProgress * 1000);
+  draw();
+  raf = requestAnimationFrame(tick);
+}
+
+function setPlaying(p) {
+  playing = p;
+  document.getElementById("play").textContent = p ? "❚❚ Pause" : "▶ Play";
+  if (p) { t0 = 0; raf = requestAnimationFrame(tick); }
+  else if (raf) { cancelAnimationFrame(raf); raf = null; }
+}
+
+document.getElementById("play").addEventListener("click", () => setPlaying(!playing));
+document.getElementById("reset").addEventListener("click", () => {
+  phaseProgress = 0; t0 = 0;
+  document.getElementById("scrub").value = 0;
+  draw();
+});
+document.getElementById("scrub").addEventListener("input", (e) => {
+  setPlaying(false);
+  phaseProgress = e.target.value / 1000;
+  draw();
+});
+wsel.addEventListener("change", () => {
+  state = buildSeries(+wsel.value);
+  setupAxes();
+  updateMetrics();
+  draw();
+});
+
+setupAxes();
+updateMetrics();
+draw();
+setPlaying(true);
+</script>
+</body>
+</html>
