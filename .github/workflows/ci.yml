@@ -67,8 +67,12 @@ jobs:
         with:
           enable-cache: true
 
+      # `--all-groups` so the `serve` group (fastapi / uvicorn / pydantic-settings /
+      # prometheus-client) is installed alongside `dev` — `tests/unit/test_serve_schemas.py`
+      # and `tests/integration/test_serve_endpoints.py` import from `m5.serve`,
+      # which fails to collect without those packages.
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --all-groups
 
       - name: Run pytest
         run: uv run pytest --cov --cov-report=term-missing
