@@ -1187,7 +1187,10 @@ def render_gif(
     anim = FuncAnimation(fig, update, frames=n_frames, interval=int(1000 / fps), blit=False)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     writer = PillowWriter(fps=fps)
-    anim.save(str(out_path), writer=writer)
+    # Pin dpi=100 to match the figure's dpi — matplotlib's default `savefig.dpi`
+    # is 150 on some platforms, which would yield an output 1.5x the requested
+    # width / height. Pinning here keeps the rendered GIF exactly width x height.
+    anim.save(str(out_path), writer=writer, dpi=100)
     plt.close(fig)
     return out_path
 
