@@ -38,20 +38,35 @@ level is the noisiest and dominates the aggregate.
 ## What to expect from this repo
 
 This is a **deliberately minimal** baseline (3 stats models + a single LightGBM
-global model with ~6 features and 3 lags). Realistic expectations:
+global model with ~6 features and 3 lags).
 
-| Model in this repo               | Typical bottom-level WRMSSE | Rough leaderboard equivalent |
-|----------------------------------|----------------------------:|------------------------------|
-| SeasonalNaive(7)                 | ~0.95 – 1.10                | well below benchmarks        |
-| Theta                            | ~0.80 – 0.90                | ≈ M5 Theta benchmark         |
-| AutoETS('ZNA')                   | ~0.78 – 0.88                | ≈ M5 ETS benchmark           |
-| LightGBM (Tweedie, 3 lags)       | ~0.65 – 0.72                | ≈ top-15% (silver/bronze edge) |
-| Hierarchical Theta + MinTrace    | ~0.70 – 0.78                | ≈ top-25% on aggregate metric  |
+### Actual results — GCP `n2-highmem-8` run, 2026-05-10 (`20260510T052927Z`)
 
-To approach top-tier (≤0.55), you need: more features (price-bin lags, day-of-month
-encodings, holiday-distance), per-store LightGBM models, weighted blends across
-horizons, and post-hoc reconciliation. The repo's tenet is "fewer features, not
-more" — so the LightGBM number above is the realistic ceiling without that work.
+Full M5 (30,490 series × 400-day trailing window, h=28, n_windows=3, seed=42).
+Code at git `1adcf65` (origin/ai).
+
+| Model         | Bottom-only WRMSSE | **Official 12-level WRMSSE** | Kaggle equivalent |
+|---------------|-------------------:|-----------------------------:|-------------------|
+| **LGBM**      | 0.8402             | **0.6418**                   | **~rank 250–300, top 5%, silver-bronze edge** |
+| AutoETS       | 0.8631             | 0.6724                       | ~rank 400, top 7%, bronze cutoff |
+| Theta         | 0.8695             | 0.7376                       | ≈ M5 Theta benchmark |
+| SeasonalNaive | 1.1115             | 0.8326                       | ≈ M5 sNaive benchmark |
+
+LGBM wins **11 of 12** M5 levels; AutoETS wins only the Total level (by 0.002).
+Most stable across CV folds: AutoETS (std = 0.0245); FVA vs sNaive (MAE):
+LGBM **+19.1%**, AutoETS +15.5%, Theta +14.9%.
+
+### To approach top-tier (≤0.55) you need
+
+The repo's tenet is "fewer features, not more" — so the LGBM 0.642 number above
+is roughly the ceiling without:
+
+- More features (price-bin lags, day-of-month encodings, holiday-distance, weather)
+- Per-store LightGBM models (10× the parameters, but matches the structural
+  heterogeneity that's been lossy at the bottom level — see WI_2 0.93 vs WI_1 0.79)
+- Weighted blends across horizons + recursive vs direct multi-step
+- Post-hoc reconciliation (BU + MinTrace on top of LGBM, not just Theta)
+- Tweedie variance-power tuning per category (FOODS_3 needs higher than HOBBIES)
 
 ## Sources
 
