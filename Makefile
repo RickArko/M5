@@ -180,7 +180,6 @@ eval: cv-stats cv-lgbm score ## End-to-end: stats + lgbm CV, then score the merg
 
 viz: ## Render assets/pipeline.{svg,html} from the latest fitted artifact
 	$(UV) run m5 viz
-
 # ---- Notebooks -----------------------------------------------------
 
 notebook: ## Launch Jupyter Lab with the notebook dep group
