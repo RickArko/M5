@@ -81,6 +81,12 @@ serve = [
     "pydantic-settings>=2.6",
     "prometheus-client>=0.21",
 ]
+loadtest = [
+    # Locust for client-side load generation; pyyaml for tiers.yaml parsing in the
+    # phase-2 orchestrator. Matplotlib already in main deps (used by m5.reporting).
+    "locust>=2.31",
+    "pyyaml>=6.0",
+]
 
 # ----------------------------------------------------------------------
 # Tooling

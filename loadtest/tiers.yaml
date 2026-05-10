@@ -1,0 +1,47 @@
+# Tier definitions for the API load-test sweep.
+#
+# Used by loadtest/run_tier_sweep.sh (phase 2). Phase 1 just validates the
+# Locust shape against a local m5 serve.
+#
+# Cost columns are list prices as of 2026-05; verify against
+# https://cloud.google.com/compute/all-pricing before invoicing.
+
+sweep_id: 2026-05-loadtest-v1
+
+# Hard guardrail — orchestrator aborts before launching a tier that would
+# breach this cumulative spend (in USD).
+max_total_spend_usd: 2.00
+
+# Default shape (overridable per-tier).
+defaults:
+  warm_s: 30
+  hold_s: 180
+  ramp_s: 60
+  cooldown_s: 30
+  horizon: 28
+  batch_n: 10
+
+tiers:
+  - alias: cheap
+    machine_type: e2-small
+    hourly_usd: 0.018
+    max_users: 50
+    notes: "2 shared vCPU / 2 GB — expect CPU-credit exhaustion under sustained load."
+
+  - alias: default
+    machine_type: e2-medium
+    hourly_usd: 0.034
+    max_users: 100
+    notes: "Current cloud/README.md serve default."
+
+  - alias: dedicated
+    machine_type: n2-standard-2
+    hourly_usd: 0.097
+    max_users: 200
+    notes: "2 dedicated vCPU / 8 GB — predictable p99."
+
+  - alias: cpu-heavy
+    machine_type: n2-highcpu-4
+    hourly_usd: 0.143
+    max_users: 400
+    notes: "4 dedicated vCPU / 4 GB — hypothesised best $/MRPS for LGBM inference."

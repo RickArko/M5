@@ -47,6 +47,10 @@ reports/
 !tests/fixtures/*.csv
 !tests/fixtures/*.parquet
 
+# --- Load test (generated corpora; the directory itself is tracked) ---
+loadtest/payloads/*
+!loadtest/payloads/.gitkeep
+
 # --- OS -------------------------------------------------------------
 .DS_Store
 Thumbs.db

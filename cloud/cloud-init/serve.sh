@@ -36,7 +36,31 @@ ARTIFACT_DIR=/srv/m5-artifact
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
-    git curl ca-certificates make jq awscli unzip
+    git curl ca-certificates make jq unzip apt-transport-https gnupg
+
+# Install the object-storage CLI that matches the artifact source scheme.
+case "$M5_ARTIFACT_SOURCE" in
+    gs://*)
+        if ! command -v gcloud >/dev/null 2>&1; then
+            echo "==> installing google-cloud-cli (for gs:// pull)"
+            curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+                | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+            echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+                > /etc/apt/sources.list.d/google-cloud-sdk.list
+            apt-get update -y
+            apt-get install -y --no-install-recommends google-cloud-cli
+        fi
+        ;;
+    s3://*)
+        apt-get install -y --no-install-recommends awscli
+        ;;
+    az://*)
+        curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+        ;;
+    *)
+        echo "WARN: unknown M5_ARTIFACT_SOURCE scheme: $M5_ARTIFACT_SOURCE" >&2
+        ;;
+esac
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "==> installing Docker"
