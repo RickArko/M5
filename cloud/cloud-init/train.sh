@@ -99,7 +99,7 @@ if [ "$M5_RUN_CV" = "true" ]; then
     echo "==> $(date -Is) m5-train: cv lgbm (h=$M5_HORIZON, n_windows=$M5_CV_N_WINDOWS)"
     "$UV_BIN" run m5 cv lgbm  --horizon "$M5_HORIZON" --n-windows "$M5_CV_N_WINDOWS"
     echo "==> $(date -Is) m5-train: score"
-    "$UV_BIN" run m5 score -m cv_stats -m cv_lgbm
+    "$UV_BIN" run m5 score -m stats -m lgbm
 fi
 
 echo "==> $(date -Is) m5-train: train (final fit on full data)"
