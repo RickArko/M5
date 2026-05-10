@@ -203,6 +203,22 @@ loadtest-local: ## Run locust against a local `make serve` (headless, csv → re
 	    --csv reports/loadtest/local \
 	    --html reports/loadtest/local.html
 
+loadtest-tier-gcp: ## Run a single GCP tier end-to-end (TIER=cheap; needs GOOGLE_APPLICATION_CREDENTIALS)
+	@[ -n "$(TIER)" ] || { echo "Usage: make loadtest-tier-gcp TIER=cheap" >&2; exit 1; }
+	@[ -f $(LOADTEST_PAYLOAD) ] || { echo "$(LOADTEST_PAYLOAD) not found — run `make loadtest-payload` first." >&2; exit 1; }
+	$(UV) run --group loadtest python -m loadtest.sweep tier --alias $(TIER)
+
+loadtest-sweep-gcp: ## Run the full GCP tier sweep (cost-guarded by loadtest/tiers.yaml)
+	@[ -f $(LOADTEST_PAYLOAD) ] || { echo "$(LOADTEST_PAYLOAD) not found — run `make loadtest-payload` first." >&2; exit 1; }
+	$(UV) run --group loadtest python -m loadtest.sweep all
+
+loadtest-sweep-plan: ## Print the sweep plan (no GCP calls; dry-run)
+	$(UV) run --group loadtest python -m loadtest.sweep all --dry-run
+
+loadtest-aggregate: ## Build summary.md + figures from a sweep dir (TS=<UTC-timestamp>)
+	@[ -n "$(TS)" ] || { echo "Usage: make loadtest-aggregate TS=20260510T060000Z" >&2; exit 1; }
+	$(UV) run --group loadtest python -m loadtest.aggregate reports/loadtest/$(TS)
+
 # ---- Visualisation -------------------------------------------------
 # `make viz` reads the latest fitted artifact + long.parquet and renders
 # assets/pipeline.svg (auto-plays in README) + assets/pipeline.html
