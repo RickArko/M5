@@ -294,7 +294,10 @@ def run_tier(
         typer.echo(f"\n=== tier {tier.alias} ({tier.machine_type}) ===")
         ip = terraform_apply_serve(tier, tf_dir)
         typer.echo(f"  serve VM up at {ip}")
-        wait_for_ready(ip, port=serve_port, max_s=300)
+        # 900s: serve.sh's `docker compose up --build` on a fresh VM rebuilds
+        # the full python/uvicorn/mlforecast image. On the slowest tier (e2-small)
+        # that takes 5-8 min; 5 min is too tight, 15 min is safe-with-margin.
+        wait_for_ready(ip, port=serve_port, max_s=900)
         warm(ip, port=serve_port, payload=payload, warm_s=tier.warm_s)
         stats = run_locust(tier=tier, ip=ip, port=serve_port, payload=payload, out_prefix=out_prefix)
     finally:

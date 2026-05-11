@@ -22,11 +22,15 @@ defaults:
   batch_n: 10
 
 tiers:
-  - alias: cheap
-    machine_type: e2-small
-    hourly_usd: 0.018
-    max_users: 50
-    notes: "2 shared vCPU / 2 GB — expect CPU-credit exhaustion under sustained load."
+  # `cheap` (e2-small) is disabled — docker build of the m5-forecaster image
+  # from scratch takes >20 min on 2 shared vCPU + 2 GB RAM, longer than our
+  # /readyz timeout. Re-enable once we pre-build the image and push to GCR
+  # so the VM does `docker pull` (30s) instead of `docker build` (5-20 min).
+  # - alias: cheap
+  #   machine_type: e2-small
+  #   hourly_usd: 0.018
+  #   max_users: 50
+  #   notes: "2 shared vCPU / 2 GB — gated on pre-built image in GCR."
 
   - alias: default
     machine_type: e2-medium
