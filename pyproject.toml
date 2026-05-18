@@ -78,7 +78,7 @@ serve = [
     # (depends on httpx) without an extra dev dep.
     "fastapi[standard]>=0.115",
     "uvicorn[standard]>=0.32",
-    "pydantic-settings>=2.6",
+    "pydantic-settings>=2.14.1",
     "prometheus-client>=0.21",
 ]
 loadtest = [
