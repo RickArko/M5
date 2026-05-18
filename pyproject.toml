@@ -17,7 +17,7 @@ dependencies = [
     "hierarchicalforecast>=1.2.0",
     # --- ML / numerics ----------------------------------------------
     "lightgbm>=4.5.0",
-    "numpy>=2.0",
+    "numpy>=2.4.5",
     # Pinned <3 — pandas 3.0's PyArrow-backed `str` dtype isn't accepted by LightGBM
     # (and forces a datasetsforecast downgrade). Revisit when the Nixtla stack
     # publishes pandas-3-compatible releases. See closed PR #9 for failure details.
