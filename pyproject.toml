@@ -59,11 +59,11 @@ include = ["src/m5", "README.md", "WriteUp.md", "LICENSE"]
 dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
-    "ruff>=0.8",
-    "mypy>=1.13",
+    "ruff>=0.15.13",
+    "mypy>=2.1.0",
     "pandas-stubs>=2.2",
-    "types-tqdm>=4.67",
-    "types-pyyaml>=6.0",
+    "types-tqdm>=4.67.3.20260518",
+    "types-pyyaml>=6.0.12.20260518",
     "pre-commit>=4.0",
 ]
 notebook = [
