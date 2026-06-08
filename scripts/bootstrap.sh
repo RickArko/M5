@@ -37,12 +37,8 @@ if [ -d .git ]; then
 fi
 
 # 6) Download data ---------------------------------------------------
-if [ ! -d data/m5/datasets ]; then
-    echo "==> Downloading M5 raw data (one-time, ~250MB)"
-    uv run m5 download
-else
-    echo "==> M5 raw data already present (skip download)"
-fi
+echo "==> Ensuring M5 raw data is present (one-time, ~250MB if missing)"
+uv run m5 download
 
 cat <<NEXT
 

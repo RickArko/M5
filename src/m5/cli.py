@@ -16,6 +16,17 @@ app = typer.Typer(add_completion=False, help="M5 forecasting toolkit.")
 
 
 _CV_KEY_COLS = ("unique_id", "ds", "cutoff", "y")
+_RAW_REQUIRED_FILES = ("calendar.csv", "sell_prices.csv", "sales_train_evaluation.csv")
+
+
+def _missing_raw_files(raw_dir: Path) -> list[str]:
+    """Return required raw CSVs that are absent or empty."""
+    missing = []
+    for name in _RAW_REQUIRED_FILES:
+        path = raw_dir / name
+        if not path.is_file() or path.stat().st_size == 0:
+            missing.append(name)
+    return missing
 
 
 def _load_cv_files(model_names: list[str], artifacts_dir: Path) -> tuple[pd.DataFrame, list[str]]:
@@ -62,10 +73,21 @@ def _load_cv_files(model_names: list[str], artifacts_dir: Path) -> tuple[pd.Data
 def download() -> None:
     """Download the M5 raw dataset via ``datasetsforecast``."""
     from datasetsforecast.m5 import M5
+    from datasetsforecast.utils import download_file
 
     SETTINGS.ensure_dirs()
-    logger.info(f"Downloading M5 → {SETTINGS.data_dir}")
-    M5.load(directory=str(SETTINGS.data_dir))
+    missing = _missing_raw_files(SETTINGS.raw_dir)
+    if not missing:
+        logger.info(f"M5 raw CSVs already present under {SETTINGS.raw_dir}.")
+        return
+
+    logger.info(f"Missing M5 raw CSVs under {SETTINGS.raw_dir}: {', '.join(missing)}")
+    logger.info(f"Downloading M5 → {SETTINGS.raw_dir}")
+    download_file(directory=SETTINGS.raw_dir, source_url=M5.source_url, decompress=True)
+
+    missing = _missing_raw_files(SETTINGS.raw_dir)
+    if missing:
+        raise RuntimeError(f"M5 download finished but required CSVs are still missing: {', '.join(missing)}")
     logger.info("Done.")
 
 
