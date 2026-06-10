@@ -67,9 +67,20 @@ dev = [
     "pre-commit>=4.0",
 ]
 notebook = [
-    "jupyter>=1.1",
-    "ipykernel>=7.2.0,<8",
-    "jupyterlab>=4.3",
+    # Keep the VSCode notebook kernel on the mature ipykernel 6 / JupyterLab 4.4
+    # stack. The ipykernel 7 + freshest jupyter-client/pyzmq/debugpy stack has
+    # been flaky here: cells remain "executing" and `%autoreload` hangs until a
+    # kernel restart.
+    "jupyter>=1.1,<1.2",
+    "ipykernel>=6.29.5,<7",
+    "ipython>=8.31,<9",
+    "jupyterlab>=4.3,<4.5",
+    "notebook>=7.3,<7.5",
+    "jupyter-server>=2.14,<2.17",
+    "jupyter-client>=8.6,<8.7",
+    "nbconvert>=7.16,<7.17",
+    "pyzmq>=26,<27",
+    "debugpy>=1.8,<1.9",
     "plotly>=5.24",
 ]
 serve = [

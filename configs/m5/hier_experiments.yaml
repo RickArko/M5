@@ -22,6 +22,7 @@ model:
     alias: Theta
   reconcilers:
     - BU
+    # - TD_fp   # invalid for M5 hierarchies that don't sum to the total
     - MinT_OLS
     - MinT_WLS_struct
     - MinT_WLS_var
