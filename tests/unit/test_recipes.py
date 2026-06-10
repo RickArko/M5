@@ -219,7 +219,7 @@ def test_build_forecaster_dispatches_stats(stats_recipe: Recipe) -> None:
 def test_build_forecaster_dispatches_hier(hier_recipe: Recipe) -> None:
     bundle = build_forecaster(hier_recipe)
     assert isinstance(bundle, HierForecaster)
-    assert len(bundle.reconcilers) == 4
+    assert len(bundle.reconcilers) == 3
 
 
 def test_build_forecaster_rejects_wrong_kind_for_lgbm_builder(stats_recipe: Recipe) -> None:
