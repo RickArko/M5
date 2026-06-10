@@ -142,9 +142,10 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
 
             # next event
             next_idx = np.searchsorted(evt_vals, ds_vals, side="right")
+            clipped_next_idx = np.clip(next_idx, 0, len(evt_vals) - 1)
             next_evt = np.where(
                 next_idx < len(evt_vals),
-                evt_vals[next_idx],
+                evt_vals[clipped_next_idx],
                 np.datetime64("NaT"),
             )
             days_next = np.where(
@@ -155,9 +156,10 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
 
             # prev event
             prev_idx = np.searchsorted(evt_vals, ds_vals, side="left") - 1
+            clipped_prev_idx = np.clip(prev_idx, 0, len(evt_vals) - 1)
             prev_evt = np.where(
                 prev_idx >= 0,
-                evt_vals[prev_idx],
+                evt_vals[clipped_prev_idx],
                 np.datetime64("NaT"),
             )
             days_prev = np.where(
@@ -209,7 +211,8 @@ def add_release_features(df: pd.DataFrame) -> pd.DataFrame:
 
     release = df[df["y"] > 0].groupby("unique_id", observed=True)["ds"].min().rename("release_date")
     df = df.merge(release, on="unique_id", how="left")
-    df["days_since_release"] = (df["ds"] - df["release_date"]).dt.days.astype(np.int16)
+    days = (df["ds"] - df["release_date"]).dt.days
+    df["days_since_release"] = days.fillna(-1).astype(np.int16)
     df = df.drop(columns=["release_date"])
     return df
 
