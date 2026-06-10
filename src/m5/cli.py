@@ -49,13 +49,19 @@ def _load_cv_files(model_names: list[str], artifacts_dir: Path) -> tuple[pd.Data
 
     base = frames[0][1][list(_CV_KEY_COLS)].copy()
     forecast_cols: list[str] = []
-    for _, df in frames:
-        for c in df.columns:
-            if c in _CV_KEY_COLS or c in forecast_cols:
-                continue
-            forecast_cols.append(c)
     merged = base
-    for _, df in frames:
+    for m, df in frames:
+        # Rename forecast columns to avoid collisions across CV files.
+        # e.g. LGBM from cv_lgbm -> lgbm_LGBM, LGBM from cv_store -> store_LGBM
+        rename_map: dict[str, str] = {}
+        for c in df.columns:
+            if c in _CV_KEY_COLS:
+                continue
+            new_name = f"{m}_{c}"
+            rename_map[c] = new_name
+            forecast_cols.append(new_name)
+        if rename_map:
+            df = df.rename(columns=rename_map)
         cols = [c for c in df.columns if c not in _CV_KEY_COLS]
         merged = merged.merge(
             df[["unique_id", "ds", "cutoff", *cols]],
@@ -398,6 +404,58 @@ def forecast(
     out.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(out, index=False)
     logger.info(f"Wrote {out} ({len(out_df):,d} rows).")
+
+
+@app.command()
+def ensemble(
+    models: list[str] = typer.Option(
+        ...,
+        "--model",
+        "-m",
+        help="Artifact base name (reads artifacts/cv_<name>.parquet). Repeat for multiple.",
+    ),
+    weights: list[float] | None = typer.Option(
+        None,
+        "--weight",
+        "-w",
+        help="Weight per model. If omitted, equal weights are used. Must match number of models.",
+    ),
+    out_name: str = typer.Option(
+        "ensemble", help="Output artifact base name (writes artifacts/cv_<out_name>.parquet)."
+    ),
+    artifacts_dir: Path = typer.Option(None, help="Directory containing cv_*.parquet files."),
+) -> None:
+    """Average multiple CV artifacts into a single ensemble forecast.
+
+    Reads ``cv_<model>.parquet`` for each ``--model``, aligns them on
+    ``(unique_id, ds, cutoff)``, computes a weighted average of the forecast
+    columns, and writes ``cv_<out_name>.parquet`` with a single
+    ``<out_name>`` column. The resulting artifact can be scored alongside
+    the individual models via ``m5 score --model <out_name>``.
+    """
+    ad = artifacts_dir or SETTINGS.artifacts_dir
+    merged, forecast_cols = _load_cv_files(models, ad)
+
+    if weights is None:
+        weights = [1.0 / len(forecast_cols)] * len(forecast_cols)
+    elif len(weights) != len(forecast_cols):
+        raise typer.BadParameter(
+            f"Number of weights ({len(weights)}) must match number of forecast columns ({len(forecast_cols)})."
+        )
+    total = sum(weights)
+    if total == 0:
+        raise typer.BadParameter("Weights must not sum to zero.")
+    weights = [w / total for w in weights]
+
+    logger.info(f"ensemble: averaging {len(forecast_cols)} columns with weights {weights}")
+    merged[out_name] = sum(merged[col] * w for col, w in zip(forecast_cols, weights, strict=True))
+
+    # Keep only the key columns + the ensemble column
+    out_cols = ["unique_id", "ds", "cutoff", "y", out_name]
+    out_df = merged[out_cols].copy()
+    out_path = ad / f"cv_{out_name}.parquet"
+    out_df.to_parquet(out_path, index=False)
+    logger.info(f"ensemble: wrote {out_path} ({len(out_df):,d} rows)")
 
 
 @app.command()

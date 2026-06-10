@@ -207,15 +207,21 @@ compare-existing: ## Score existing artifacts and print comparison table
 
 eval: cv-stats cv-lgbm score ## End-to-end: stats + lgbm CV, then score the merged report
 
-compare: ## Run all CVs + score + print comparison table (baseline vs improvements)
+ensemble: ## Build ensemble from existing CV artifacts (lgbm + store + store_cat + stats)
+	@echo "==> Building ensemble from existing CV artifacts"
+	$(UV) run m5 ensemble --model lgbm --model store --model store_cat --model stats
+
+compare: ## Run all CVs + build ensemble + score + print comparison table
 	@echo "==> Running baseline + new model CVs (capped for dev)"
 	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv stats --horizon $(HORIZON)
 	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv lgbm --horizon $(HORIZON)
 	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv store --horizon $(HORIZON)
 	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv store_cat --horizon $(HORIZON)
-	@echo "==> Scoring all models"
+	@echo "==> Building ensemble"
+	$(UV) run m5 ensemble --model lgbm --model store --model store_cat --model stats
+	@echo "==> Scoring all models (including ensemble)"
 	$(UV) run m5 score --out $(REPORT) --run-id $(RUN_ID) \
-		--model stats --model lgbm --model store --model store_cat
+		--model stats --model lgbm --model store --model store_cat --model ensemble
 	@echo "==> Comparison table"
 	$(UV) run python scripts/compare_scores.py $(REPORT) --baseline lgbm
 
