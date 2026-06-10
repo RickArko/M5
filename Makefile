@@ -4,9 +4,10 @@
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap install activate lint fmt typecheck test test-smoke test-unit \
         test-integration test-fast cov check \
-        download prep cv-stats cv-lgbm cv-hier cv-recipe forecast-stats forecast-lgbm forecast-hier \
+        download prep cv-stats cv-lgbm cv-hier cv-recipe cv-segmented cv-store cv-store-cat cv-store-dept \
+        forecast-stats forecast-lgbm forecast-hier forecast-segmented forecast-store forecast-store-cat forecast-store-dept \
         train serve serve-prod docker-build docker-up docker-down docker-logs \
-        score score-all eval viz notebook clean clean-all
+        score score-all compare compare-existing eval viz notebook clean clean-all
 
 UV       ?= uv
 VENV     ?= .venv
@@ -117,6 +118,18 @@ cv-hier: ## Cross-validate the hierarchical pipeline (Theta + BU/MinT reconciler
 cv-recipe: ## Cross-validate from a YAML recipe (RECIPE=configs/m5/lgbm.yaml)
 	$(UV) run m5 cv-recipe $(RECIPE) --horizon $(HORIZON) --n-windows $(WINDOWS)
 
+cv-segmented: ## Cross-validate 10 store-level LightGBM models
+	$(UV) run m5 cv segmented --horizon $(HORIZON) --n-windows $(WINDOWS)
+
+cv-store: ## Alias for cv-segmented (10 store-level models)
+	$(UV) run m5 cv store --horizon $(HORIZON) --n-windows $(WINDOWS)
+
+cv-store-cat: ## Cross-validate 30 store-category LightGBM models
+	$(UV) run m5 cv store_cat --horizon $(HORIZON) --n-windows $(WINDOWS)
+
+cv-store-dept: ## Cross-validate 70 store-department LightGBM models
+	$(UV) run m5 cv store_dept --horizon $(HORIZON) --n-windows $(WINDOWS)
+
 forecast-stats: ## Train+predict statistical baselines
 	$(UV) run m5 forecast stats --horizon $(HORIZON)
 
@@ -125,6 +138,18 @@ forecast-lgbm: ## Train+predict LightGBM global model
 
 forecast-hier: ## Train+predict hierarchical (Theta base, 4 reconcilers)
 	$(UV) run m5 forecast hier --horizon $(HORIZON)
+
+forecast-segmented: ## Train+predict 10 store-level LightGBM models
+	$(UV) run m5 forecast segmented --horizon $(HORIZON)
+
+forecast-store: ## Alias for forecast-segmented
+	$(UV) run m5 forecast store --horizon $(HORIZON)
+
+forecast-store-cat: ## Train+predict 30 store-category LightGBM models
+	$(UV) run m5 forecast store_cat --horizon $(HORIZON)
+
+forecast-store-dept: ## Train+predict 70 store-department LightGBM models
+	$(UV) run m5 forecast store_dept --horizon $(HORIZON)
 
 # ---- Serving (FastAPI) --------------------------------------------
 # `make train` produces a versioned artifact under artifacts/models/lgbm/<ts>/
@@ -171,7 +196,28 @@ score-all: ## Score every CV artifact found in artifacts/ (cv_<name>.parquet)
 	for m in $$models; do CMD="$$CMD --model $$m"; done; \
 	echo "$$CMD"; eval $$CMD
 
+compare-existing: ## Score existing artifacts and print comparison table
+	@set -e; \
+	models=$$(ls artifacts/cv_*.parquet 2>/dev/null | sed -e 's|artifacts/cv_||' -e 's|\.parquet$$||'); \
+	if [ -z "$$models" ]; then echo "No artifacts/cv_*.parquet found — run a cv-* target first." >&2; exit 1; fi; \
+	CMD="$(UV) run m5 score --out $(REPORT) --run-id $(RUN_ID)"; \
+	for m in $$models; do CMD="$$CMD --model $$m"; done; \
+	echo "$$CMD"; eval $$CMD; \
+	$(UV) run python scripts/compare_scores.py $(REPORT) --baseline lgbm
+
 eval: cv-stats cv-lgbm score ## End-to-end: stats + lgbm CV, then score the merged report
+
+compare: ## Run all CVs + score + print comparison table (baseline vs improvements)
+	@echo "==> Running baseline + new model CVs (capped for dev)"
+	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv stats --horizon $(HORIZON)
+	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv lgbm --horizon $(HORIZON)
+	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv store --horizon $(HORIZON)
+	M5_N_SERIES=5000 M5_N_WINDOWS=1 $(UV) run m5 cv store_cat --horizon $(HORIZON)
+	@echo "==> Scoring all models"
+	$(UV) run m5 score --out $(REPORT) --run-id $(RUN_ID) \
+		--model stats --model lgbm --model store --model store_cat
+	@echo "==> Comparison table"
+	$(UV) run python scripts/compare_scores.py $(REPORT) --baseline lgbm
 
 # ---- Load test (phase 1: local; phases 2-3 add GCP tier sweep) -----
 # Plan: docs/plans/api_loadtest.md. Generate the payload corpus once

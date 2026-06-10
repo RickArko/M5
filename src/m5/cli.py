@@ -123,7 +123,9 @@ def prep(
 
 @app.command()
 def cv(
-    model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),
+    model: str = typer.Argument(
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+    ),
     horizon: int = typer.Option(SETTINGS.horizon),
     n_windows: int = typer.Option(SETTINGS.n_windows),
     long_path: Path = typer.Option(None, help="Path to processed long parquet."),
@@ -131,6 +133,7 @@ def cv(
     """Run reproducible rolling-origin cross-validation."""
     from m5.cv import hier_cv, lgbm_cv, stats_cv
     from m5.evaluation import compute_components, wrmsse_for_models
+    from m5.models.segmented import store_cat_cv, store_cv, store_dept_cv
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
     df = pd.read_parquet(long_path)
@@ -141,8 +144,16 @@ def cv(
         cv_df = lgbm_cv(df, h=horizon, n_windows=n_windows)
     elif model == "hier":
         cv_df = hier_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "segmented" or model == "store":
+        cv_df = store_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "store_cat":
+        cv_df = store_cat_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "store_dept":
+        cv_df = store_dept_cv(df, h=horizon, n_windows=n_windows)
     else:
-        raise typer.BadParameter(f"Unknown model: {model!r}. Use 'stats', 'lgbm', or 'hier'.")
+        raise typer.BadParameter(
+            f"Unknown model: {model!r}. Use 'stats', 'lgbm', 'hier', 'segmented', 'store', 'store_cat', or 'store_dept'."
+        )
     components = compute_components(df[df["ds"] < cv_df["ds"].min()])
     truth = cv_df.rename(columns={"y": "y"})[["unique_id", "ds", "y"]]
     scores = wrmsse_for_models(truth, cv_df, components)
@@ -351,13 +362,16 @@ def serve(
 
 @app.command()
 def forecast(
-    model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),
+    model: str = typer.Argument(
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+    ),
     horizon: int = typer.Option(SETTINGS.horizon),
     long_path: Path = typer.Option(None),
 ) -> None:
     """Train on all available data and emit a future forecast."""
     from m5.models.hierarchical import fit_predict_hier
     from m5.models.lgbm import fit_predict_lgbm
+    from m5.models.segmented import fit_predict_store, fit_predict_store_cat, fit_predict_store_dept
     from m5.models.stats import fit_predict_stats
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
@@ -371,6 +385,12 @@ def forecast(
         out_df = fit_predict_lgbm(df, horizon=horizon)
     elif model == "hier":
         out_df = fit_predict_hier(df, horizon=horizon)
+    elif model in ("segmented", "store"):
+        out_df = fit_predict_store(df, horizon=horizon)
+    elif model == "store_cat":
+        out_df = fit_predict_store_cat(df, horizon=horizon)
+    elif model == "store_dept":
+        out_df = fit_predict_store_dept(df, horizon=horizon)
     else:
         raise typer.BadParameter(f"Unknown model: {model!r}.")
 
