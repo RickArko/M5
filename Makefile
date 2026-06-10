@@ -111,7 +111,7 @@ cv-stats: ## Cross-validate Theta + AutoETS + SeasonalNaive
 cv-lgbm: ## Cross-validate the LightGBM global model
 	$(UV) run m5 cv lgbm --horizon $(HORIZON) --n-windows $(WINDOWS)
 
-cv-hier: ## Cross-validate the hierarchical pipeline (Theta + BU/TD/MinT reconcilers)
+cv-hier: ## Cross-validate the hierarchical pipeline (Theta + BU/MinT reconcilers)
 	$(UV) run m5 cv hier --horizon $(HORIZON) --n-windows $(WINDOWS)
 
 cv-recipe: ## Cross-validate from a YAML recipe (RECIPE=configs/m5/lgbm.yaml)

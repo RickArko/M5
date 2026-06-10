@@ -1,10 +1,10 @@
 """Hierarchical forecasting via Nixtla ``hierarchicalforecast``.
 
 Pipeline: aggregate the bottom-level long frame to all 12 M5 levels, fit a
-statistical base model at every level, then reconcile via four standard
-methods (BottomUp, TopDown forecast-proportions, MinTrace OLS, MinTrace
-shrinkage). Each reconciler appears as its own column in the output, mirroring
-how :mod:`m5.models.stats` returns Theta / AutoETS / SeasonalNaive side-by-side.
+statistical base model at every level, then reconcile via the configured
+methods (BottomUp, MinTrace variants, and optional ERM variants). Each
+reconciler appears as its own column in the output, mirroring how
+:mod:`m5.models.stats` returns Theta / AutoETS / SeasonalNaive side-by-side.
 
 The base model is `statsforecast` with Theta — fast, deterministic, and a
 strong M5 baseline. LightGBM-as-base would need per-level feature handling
@@ -36,7 +36,7 @@ def _load_hier_recipe() -> Recipe:
 
 
 def build_hier_reconcilers() -> list:
-    """Default reconciler bundle from ``configs/m5/hier.yaml``: BU + TD + MinT(OLS) + MinT(shrink)."""
+    """Default reconciler bundle from ``configs/m5/hier.yaml``."""
     return build_hier_reconcilers_from_recipe(_load_hier_recipe())
 
 
@@ -75,9 +75,7 @@ def fit_predict_hier(
 
     Returns:
         Long frame with one row per (unique_id, ds) and one column per
-        reconciler (``Theta/BottomUp``, ``Theta/TopDown_forecast_proportions``,
-        ``Theta/MinTrace_ols``, ``Theta/MinTrace_mint_shrink``). The base
-        ``Theta`` column is also retained for diagnostics.
+        reconciler. The base ``Theta`` column is also retained for diagnostics.
     """
     hier = build_hierarchy(df)
     sf = build_hier_base_forecaster(season_length=season_length)

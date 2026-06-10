@@ -57,6 +57,11 @@ def hier_recipe() -> Recipe:
     return Recipe.from_yaml(CONFIGS / "hier.yaml")
 
 
+@pytest.fixture(scope="module")
+def hier_experiments_recipe() -> Recipe:
+    return Recipe.from_yaml(CONFIGS / "hier_experiments.yaml")
+
+
 # ----------------------------------------------------------------------
 # Schema / loading
 # ----------------------------------------------------------------------
@@ -77,7 +82,20 @@ def test_hier_yaml_loads_as_hier_recipe(hier_recipe: Recipe) -> None:
     assert isinstance(hier_recipe.model, HierRecipe)
     assert hier_recipe.model.kind == "hier"
     assert hier_recipe.model.base_model.name == "Theta"
-    assert hier_recipe.model.reconcilers == ["BU", "TD_fp", "MinT_OLS", "MinT_shrink"]
+    assert hier_recipe.model.reconcilers == ["BU", "MinT_OLS", "MinT_shrink"]
+
+
+def test_hier_experiments_yaml_loads_expanded_reconcilers(hier_experiments_recipe: Recipe) -> None:
+    assert isinstance(hier_experiments_recipe.model, HierRecipe)
+    assert hier_experiments_recipe.model.reconcilers == [
+        "BU",
+        "MinT_OLS",
+        "MinT_WLS_struct",
+        "MinT_WLS_var",
+        "MinT_shrink",
+        "ERM_closed",
+        "ERM_reg_bu",
+    ]
 
 
 def test_recipe_is_frozen(lgbm_recipe: Recipe) -> None:
@@ -152,10 +170,32 @@ def test_hier_recipe_reconcilers_match_builder(hier_recipe: Recipe) -> None:
     a = build_hier_reconcilers()
     b = build_hier_reconcilers_from_recipe(hier_recipe)
     assert [type(r).__name__ for r in a] == [type(r).__name__ for r in b]
-    # method= for TopDown / MinTrace
+    # method= for MinTrace / ERM
     a_methods = [getattr(r, "method", None) for r in a]
     b_methods = [getattr(r, "method", None) for r in b]
     assert a_methods == b_methods
+
+
+def test_hier_experiments_recipe_builds_all_reconcilers(hier_experiments_recipe: Recipe) -> None:
+    reconcilers = build_hier_reconcilers_from_recipe(hier_experiments_recipe)
+    assert [type(r).__name__ for r in reconcilers] == [
+        "BottomUp",
+        "MinTrace",
+        "MinTrace",
+        "MinTrace",
+        "MinTrace",
+        "ERM",
+        "ERM",
+    ]
+    assert [getattr(r, "method", None) for r in reconcilers] == [
+        None,
+        "ols",
+        "wls_struct",
+        "wls_var",
+        "mint_shrink",
+        "closed",
+        "reg_bu",
+    ]
 
 
 # ----------------------------------------------------------------------

@@ -2,7 +2,7 @@
 #
 # Mirrors src/m5/models/hierarchical.py:
 #   Theta @ season_length=7 as the base learner at every aggregation level,
-#   reconciled via BottomUp + TopDown(forecast_proportions) + MinTrace(OLS) + MinTrace(mint_shrink).
+#   reconciled via grouped-compatible BottomUp + MinTrace variants.
 
 task:
   name: m5
@@ -21,7 +21,7 @@ model:
     name: Theta
     season_length: 7
     alias: Theta
-  reconcilers: [BU, TD_fp, MinT_OLS, MinT_shrink]
+  reconcilers: [BU, MinT_OLS, MinT_shrink]  # TD_fp (TopDown forecast proportions)
 
 cv:
   n_windows: 3

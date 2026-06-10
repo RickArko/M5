@@ -118,7 +118,16 @@ class StatsRecipe(_Frozen):
     models: list[StatsModelSpec]
 
 
-ReconcilerName = Literal["BU", "TD_fp", "MinT_OLS", "MinT_shrink"]
+ReconcilerName = Literal[
+    "BU",
+    # "TD_fp",  # Requires Strict Hierarchical Tree for nixtla
+    "MinT_OLS",
+    "MinT_WLS_struct",
+    "MinT_WLS_var",
+    "MinT_shrink",
+    "ERM_closed",
+    "ERM_reg_bu",
+]
 
 
 class HierRecipe(_Frozen):
@@ -243,9 +252,12 @@ def build_stats_from_recipe(recipe: Recipe, *, n_jobs: int = -1) -> Any:
 
 _RECONCILER_BUILDERS: dict[str, Any] = {
     "BU": lambda: _bottom_up(),
-    "TD_fp": lambda: _top_down_fp(),
     "MinT_OLS": lambda: _mintrace("ols"),
+    "MinT_WLS_struct": lambda: _mintrace("wls_struct"),
+    "MinT_WLS_var": lambda: _mintrace("wls_var"),
     "MinT_shrink": lambda: _mintrace("mint_shrink"),
+    "ERM_closed": lambda: _erm("closed"),
+    "ERM_reg_bu": lambda: _erm("reg_bu"),
 }
 
 
@@ -255,16 +267,16 @@ def _bottom_up() -> Any:
     return BottomUp()
 
 
-def _top_down_fp() -> Any:
-    from hierarchicalforecast.methods import TopDown
-
-    return TopDown(method="forecast_proportions")
-
-
 def _mintrace(method: str) -> Any:
     from hierarchicalforecast.methods import MinTrace
 
     return MinTrace(method=method)
+
+
+def _erm(method: str, lambda_reg: float = 0.01) -> Any:
+    from hierarchicalforecast.methods import ERM
+
+    return ERM(method=method, lambda_reg=lambda_reg)
 
 
 def build_hier_base_from_recipe(recipe: Recipe, *, n_jobs: int = -1) -> Any:
