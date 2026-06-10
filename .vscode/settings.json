@@ -37,14 +37,8 @@
 
     // ---- Jupyter ----------------------------------------------------
     "jupyter.notebookFileRoot": "${workspaceFolder}",
-    "jupyter.kernels.excludePythonEnvironments": [
-        "${workspaceFolder}/.venv/bin/python"
-    ],
-    "notebook.formatOnSave.enabled": true,
-    "notebook.codeActionsOnSave": {
-        "notebook.source.organizeImports": "explicit",
-        "notebook.source.fixAll": "explicit"
-    },
+    "notebook.formatOnSave.enabled": false,
+    "notebook.codeActionsOnSave": {},
 
     // ---- Workspace hygiene -----------------------------------------
     "files.exclude": {
