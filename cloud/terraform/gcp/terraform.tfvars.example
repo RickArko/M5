@@ -11,7 +11,18 @@ artifact_bucket_name = "m5-artifacts-yourname-12345"
 
 # ---- Optional: instance sizing ----------------------------------------
 # train_machine_type = "n2-standard-8"  # 8 vCPU / 32 GB / ~$0.39/h
+# train_machine_type = "n2-highmem-16"  # 16 vCPU / 128 GB, better for cv-hier
 # serve_machine_type = "e2-medium"      # 2 vCPU / 4 GB  / ~$25/mo
+
+# ---- Optional: heavy cloud job controls -------------------------------
+# run_stats_cv   = false
+# run_lgbm_cv    = false
+# run_hier_cv    = true
+# cv_recipe      = "configs/m5/hier_experiments.yaml"
+# cv_n_windows   = 3
+# score_models   = "hier_experiments"
+# run_train      = false
+# push_processed = true
 
 # ---- Optional: tighten firewall ---------------------------------------
 # allowed_ssh_cidrs   = ["203.0.113.42/32"]

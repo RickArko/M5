@@ -1,0 +1,33 @@
+# M5 — expanded hierarchical reconciliation experiment recipe.
+#
+# Use on capped samples first. This adds variance-weighted MinTrace and ERM
+# variants to the production-sized BU / MinT baseline in hier.yaml.
+
+task:
+  name: m5
+  id_col: unique_id
+  time_col: ds
+  target_col: y
+  freq: D
+  horizon: 28
+  static_cols: [item_id, dept_id, cat_id, store_id, state_id]
+  dynamic_cols: []
+  drop_leading_zeros: true
+
+model:
+  kind: hier
+  base_model:
+    name: Theta
+    season_length: 7
+    alias: Theta
+  reconcilers:
+    - BU
+    - MinT_OLS
+    - MinT_WLS_struct
+    - MinT_WLS_var
+    - MinT_shrink
+    - ERM_closed
+    - ERM_reg_bu
+
+cv:
+  n_windows: 1

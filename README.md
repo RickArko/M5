@@ -116,6 +116,12 @@ guide (VSCode, WSL, GPU notes).
 
 Override CV knobs on the CLI: `make cv-lgbm HORIZON=28 WINDOWS=3`.
 
+Hierarchical reconciliation experiments live in
+[`notebooks/hierarchical/`](notebooks/hierarchical/). They use the same
+recipe/CV code path as the CLI and an expanded
+[`configs/m5/hier_experiments.yaml`](configs/m5/hier_experiments.yaml) method
+sweep for capped BU, MinTrace, and ERM comparisons.
+
 ### Where outputs land
 
 | Path | Written by | Contents |

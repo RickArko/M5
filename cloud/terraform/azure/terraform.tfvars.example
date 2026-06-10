@@ -10,7 +10,18 @@ storage_account_name = "m5artifacts12345"
 
 # ---- Optional: instance sizing ----------------------------------------
 # train_vm_size = "Standard_D8s_v5"     # 8 vCPU / 32 GB / ~$0.38/h
+# train_vm_size = "Standard_E16s_v5"    # 16 vCPU / 128 GB, better for cv-hier
 # serve_vm_size = "Standard_B2s"        # 2 vCPU / 4 GB  / ~$30/mo
+
+# ---- Optional: heavy cloud job controls -------------------------------
+# run_stats_cv   = false
+# run_lgbm_cv    = false
+# run_hier_cv    = true
+# cv_recipe      = "configs/m5/hier_experiments.yaml"
+# cv_n_windows   = 3
+# score_models   = "hier_experiments"
+# run_train      = false
+# push_processed = true
 
 # ---- Optional: tighten firewall ---------------------------------------
 # allowed_ssh_cidrs   = ["203.0.113.42/32"]

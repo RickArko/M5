@@ -89,8 +89,8 @@ def hier_cv(
     """Rolling-origin CV with the hierarchical pipeline.
 
     Aggregates to all 12 M5 levels, runs Theta cross-validation at every
-    level, then reconciles each cutoff with BottomUp / TopDown / MinTrace
-    (OLS + shrinkage). With ``bottom_only=True`` (default) the result is
+    level, then reconciles each cutoff with grouped-compatible BottomUp /
+    MinTrace methods. With ``bottom_only=True`` (default) the result is
     sliced back to item × store and ids restored, so ``wrmsse_for_models``
     consumes it directly alongside ``stats_cv`` and ``lgbm_cv`` outputs.
     """

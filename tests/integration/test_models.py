@@ -59,16 +59,16 @@ def test_lgbm_fit_predict_on_toy(toy_with_calendar: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------------------
-# Hierarchical: Theta base + 4 reconcilers
+# Hierarchical: Theta base + grouped-compatible reconcilers
 # ---------------------------------------------------------------------
 @pytest.mark.skipif(
     not (_have("statsforecast") and _have("hierarchicalforecast")),
     reason="statsforecast / hierarchicalforecast missing",
 )
-def test_hier_reconciler_bundle_has_four_methods() -> None:
+def test_hier_reconciler_bundle_has_three_methods() -> None:
     from m5.models.hierarchical import build_hier_reconcilers
 
-    assert len(build_hier_reconcilers()) == 4
+    assert len(build_hier_reconcilers()) == 3
 
 
 @pytest.mark.slow
@@ -83,9 +83,9 @@ def test_hier_fit_predict_returns_bottom_level_with_reconciler_columns(
 
     out = fit_predict_hier(toy_long, horizon=7, season_length=7, bottom_only=True)
     assert {"unique_id", "ds", "Theta", "Theta/BottomUp"}.issubset(out.columns)
-    # 4 reconcilers + the base Theta column
+    # 3 reconcilers + the base Theta column
     reconciler_cols = [c for c in out.columns if c.startswith("Theta/")]
-    assert len(reconciler_cols) == 4
+    assert len(reconciler_cols) == 3
     # bottom level: original ids restored, one row per (series, day)
     assert set(out["unique_id"]) == set(toy_long["unique_id"])
     assert (out.groupby("unique_id").size() == 7).all()

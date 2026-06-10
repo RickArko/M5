@@ -10,13 +10,16 @@
 PROVIDER       ?= hetzner
 TF_DIR         := cloud/terraform/$(PROVIDER)
 TF             ?= terraform
+TF_VARS        ?=
+LOCAL_DIR      ?= artifacts/cloud/latest
+REMOTE_URI     ?=
 SSH_USER_HETZNER := root
 SSH_USER_AWS     := ubuntu
 SSH_USER_AZURE   := azureuser
 SSH_USER_GCP     := m5
 SSH_USER          = $(SSH_USER_$(shell echo $(PROVIDER) | tr a-z A-Z))
 
-.PHONY: cloud-help cloud-check cloud-init cloud-plan cloud-up cloud-down \
+.PHONY: cloud-help cloud-check cloud-init cloud-plan cloud-up cloud-down cloud-pull-run \
         cloud-output cloud-status cloud-ssh-train cloud-ssh-serve \
         cloud-train-up cloud-serve-up cloud-fmt cloud-validate cloud-validate-all
 
@@ -28,6 +31,7 @@ cloud-help: ## Cloud target reference (PROVIDER={hetzner|aws|azure|gcp})
 	@printf '  cloud-train-up       apply with create_serve=false (train only, ephemeral)\n'
 	@printf '  cloud-serve-up       apply with create_train=false (serve only, persistent)\n'
 	@printf '  cloud-down           terraform destroy (tears everything down)\n'
+	@printf '  cloud-pull-run       pull <artifact_uri>/runs/latest to LOCAL_DIR=%s\n' "$(LOCAL_DIR)"
 	@printf '  cloud-output         terraform output (IPs, ssh commands, serve URL)\n'
 	@printf '  cloud-status         curl /healthz on the serve VM\n'
 	@printf '  cloud-ssh-train      ssh into the train VM\n'
@@ -35,6 +39,7 @@ cloud-help: ## Cloud target reference (PROVIDER={hetzner|aws|azure|gcp})
 	@printf '  cloud-fmt            terraform fmt -recursive cloud/terraform/\n'
 	@printf '  cloud-validate       terraform validate (current PROVIDER)\n'
 	@printf '  cloud-validate-all   terraform validate (all four providers)\n\n'
+	@printf 'Override Terraform args with TF_VARS="-var=..."; override pull with REMOTE_URI=...\n'
 	@printf 'See cloud/README.md for setup, credentials, and cost notes.\n\n'
 
 cloud-check:
@@ -47,19 +52,32 @@ cloud-init: cloud-check ## terraform init for $(PROVIDER)
 	cd $(TF_DIR) && $(TF) init
 
 cloud-plan: cloud-check ## terraform plan for $(PROVIDER)
-	cd $(TF_DIR) && $(TF) plan
+	cd $(TF_DIR) && $(TF) plan $(TF_VARS)
 
 cloud-up: cloud-check ## terraform apply (full bring-up — train + serve)
-	cd $(TF_DIR) && $(TF) apply -auto-approve
+	cd $(TF_DIR) && $(TF) apply -auto-approve $(TF_VARS)
 
 cloud-train-up: cloud-check ## Spin up only the train VM (create_serve=false)
-	cd $(TF_DIR) && $(TF) apply -auto-approve -var='create_serve=false'
+	cd $(TF_DIR) && $(TF) apply -auto-approve -var='create_serve=false' $(TF_VARS)
 
 cloud-serve-up: cloud-check ## Spin up only the serve VM (create_train=false)
-	cd $(TF_DIR) && $(TF) apply -auto-approve -var='create_train=false'
+	cd $(TF_DIR) && $(TF) apply -auto-approve -var='create_train=false' $(TF_VARS)
 
 cloud-down: cloud-check ## terraform destroy
-	cd $(TF_DIR) && $(TF) destroy -auto-approve
+	cd $(TF_DIR) && $(TF) destroy -auto-approve $(TF_VARS)
+
+cloud-pull-run: cloud-check ## Pull latest cloud run bundle to LOCAL_DIR (or REMOTE_URI override)
+	@set -e; \
+	remote="$(REMOTE_URI)"; \
+	if [ -z "$$remote" ]; then \
+	    base=$$(cd $(TF_DIR) && $(TF) output -raw artifact_uri); \
+	    remote="$${base%/}/runs/latest"; \
+	fi; \
+	if [ "$(PROVIDER)" = "azure" ] && [ -z "$${AZ_STORAGE_ACCOUNT:-}" ]; then \
+	    export AZ_STORAGE_ACCOUNT=$$(cd $(TF_DIR) && $(TF) output -raw storage_account); \
+	fi; \
+	echo "==> pulling $$remote -> $(LOCAL_DIR)"; \
+	bash cloud/scripts/pull_artifact.sh "$$remote" "$(LOCAL_DIR)"
 
 cloud-output: cloud-check ## Print all terraform outputs
 	@cd $(TF_DIR) && $(TF) output

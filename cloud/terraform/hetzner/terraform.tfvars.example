@@ -18,6 +18,17 @@ aws_secret_access_key = "..."
 # allowed_ssh_cidrs   = ["203.0.113.42/32"]
 # allowed_serve_cidrs = ["203.0.113.42/32"]
 
+# ---- Optional: heavy cloud job controls -------------------------------
+# train_server_type = "ccx63"  # use a larger high-memory type for cv-hier
+# run_stats_cv      = false
+# run_lgbm_cv       = false
+# run_hier_cv       = true
+# cv_recipe         = "configs/m5/hier_experiments.yaml"
+# cv_n_windows      = 3
+# score_models      = "hier_experiments"
+# run_train         = false
+# push_processed    = true
+
 # ---- Optional: disable the train VM (serve only) ----------------------
 # create_train = false
 # create_serve = true

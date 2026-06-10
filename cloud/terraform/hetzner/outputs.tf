@@ -3,6 +3,11 @@ output "train_ipv4" {
   value       = try(hcloud_server.train[0].ipv4_address, null)
 }
 
+output "artifact_uri" {
+  description = "S3-compatible URI for the artifact prefix."
+  value       = var.artifact_uri
+}
+
 output "serve_ipv4" {
   description = "Public IPv4 of the serve VM (null if create_serve=false)."
   value       = try(hcloud_server.serve[0].ipv4_address, null)
