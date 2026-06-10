@@ -141,6 +141,60 @@ make cloud-up    PROVIDER=hetzner    # both VMs come up; train kicks off automat
 make cloud-status PROVIDER=hetzner   # curl http://<serve>:8000/healthz
 ```
 
+### Heavy experiment VM, then pull artifacts locally
+
+For hierarchy or recipe experiments, use a larger train VM and skip the final
+LightGBM serving fit when you only need CV artifacts and reports:
+
+```bash
+make cloud-train-up PROVIDER=aws \
+  TF_VARS="-var='train_instance_type=r7i.4xlarge' \
+           -var='run_stats_cv=false' \
+           -var='run_lgbm_cv=false' \
+           -var='run_hier_cv=true' \
+           -var='score_models=hier' \
+           -var='run_train=false'"
+```
+
+Expanded hierarchy recipe run:
+
+```bash
+make cloud-train-up PROVIDER=aws \
+  TF_VARS="-var='train_instance_type=r7i.8xlarge' \
+           -var='run_stats_cv=false' \
+           -var='run_lgbm_cv=false' \
+           -var='cv_recipe=configs/m5/hier_experiments.yaml' \
+           -var='score_models=hier_experiments' \
+           -var='run_train=false' \
+           -var='push_processed=true'"
+```
+
+Every train VM writes an immutable run bundle plus a stable latest alias:
+
+```text
+<artifact_uri>/runs/<run-id>/
+<artifact_uri>/runs/latest/
+```
+
+Mirror the latest run back into a local gitignored directory:
+
+```bash
+make cloud-pull-run PROVIDER=aws LOCAL_DIR=artifacts/cloud/latest
+```
+
+For ad hoc storage paths, bypass Terraform output discovery:
+
+```bash
+make cloud-pull-run \
+  REMOTE_URI=s3://my-bucket/m5/lgbm/runs/latest \
+  LOCAL_DIR=artifacts/cloud/latest
+```
+
+Azure pulls set `AZ_STORAGE_ACCOUNT` from Terraform output automatically when
+possible. For Hetzner/S3-compatible pulls, export the same
+`M5_OBJECT_STORE_ENDPOINT`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`
+you used for upload.
+
 ### Rotate to a fresh model
 
 ```bash

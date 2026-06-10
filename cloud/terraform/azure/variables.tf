@@ -70,6 +70,56 @@ variable "n_series" {
   default = -1
 }
 
+variable "run_id" {
+  description = "Cloud run id. Empty means the train VM creates a UTC timestamp."
+  type        = string
+  default     = ""
+}
+
+variable "run_stats_cv" {
+  type    = bool
+  default = true
+}
+
+variable "run_lgbm_cv" {
+  type    = bool
+  default = true
+}
+
+variable "run_hier_cv" {
+  type    = bool
+  default = false
+}
+
+variable "cv_recipe" {
+  description = "Optional recipe path to run with m5 cv-recipe."
+  type        = string
+  default     = ""
+}
+
+variable "cv_n_windows" {
+  type    = number
+  default = 3
+}
+
+variable "score_models" {
+  description = "Space-separated model artifact names passed to m5 score."
+  type        = string
+  default     = "stats lgbm"
+}
+
+variable "run_train" {
+  description = "Run final m5 train serving artifact fit."
+  type        = bool
+  default     = true
+}
+
+variable "push_processed" {
+  description = "Upload data/processed/long.parquet into runs/<run-id>/data."
+  type        = bool
+  default     = false
+}
+
 # ----------------------------------------------------------------------------
 # Object storage — Azure Blob.
 # ----------------------------------------------------------------------------

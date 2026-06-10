@@ -18,20 +18,29 @@ exec > >(tee -a /var/log/m5-userdata.log) 2>&1
 echo "==> $(date -Is) m5-userdata: starting (role=${role})"
 
 cat > /etc/m5-cloud.env <<'EOF'
-M5_GIT_REPO=${git_repo}
-M5_GIT_REF=${git_ref}
-M5_ARTIFACT_DEST=${artifact_dest}
-M5_ARTIFACT_SOURCE=${artifact_source}
+M5_GIT_REPO=${jsonencode(git_repo)}
+M5_GIT_REF=${jsonencode(git_ref)}
+M5_ARTIFACT_DEST=${jsonencode(artifact_dest)}
+M5_ARTIFACT_SOURCE=${jsonencode(artifact_source)}
 M5_LAST_N_DAYS=${last_n_days}
 M5_N_SERIES=${n_series}
 M5_HORIZON=${horizon}
+M5_RUN_ID=${jsonencode(run_id)}
+M5_RUN_STATS_CV=${run_stats_cv}
+M5_RUN_LGBM_CV=${run_lgbm_cv}
+M5_RUN_HIER_CV=${run_hier_cv}
+M5_CV_RECIPE=${jsonencode(cv_recipe)}
+M5_CV_N_WINDOWS=${cv_n_windows}
+M5_SCORE_MODELS=${jsonencode(score_models)}
+M5_RUN_TRAIN=${run_train}
+M5_PUSH_PROCESSED=${push_processed}
 M5_TRAIN_SHUTDOWN_ON_DONE=${shutdown_on_done}
 M5_SERVE_PORT=${serve_port}
-M5_SERVE_API_KEY=${serve_api_key}
-M5_OBJECT_STORE_ENDPOINT=${object_store_endpoint}
-AWS_ACCESS_KEY_ID=${aws_access_key_id}
-AWS_SECRET_ACCESS_KEY=${aws_secret_access_key}
-AWS_DEFAULT_REGION=${aws_region}
+M5_SERVE_API_KEY=${jsonencode(serve_api_key)}
+M5_OBJECT_STORE_ENDPOINT=${jsonencode(object_store_endpoint)}
+AWS_ACCESS_KEY_ID=${jsonencode(aws_access_key_id)}
+AWS_SECRET_ACCESS_KEY=${jsonencode(aws_secret_access_key)}
+AWS_DEFAULT_REGION=${jsonencode(aws_region)}
 EOF
 chmod 600 /etc/m5-cloud.env
 
