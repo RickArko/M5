@@ -17,6 +17,7 @@ from m5.models.segmented import (
     store_dept_cv,
 )
 from m5.models.stats import build_stats_forecaster, fit_predict_stats
+from m5.models.toto import toto_cv, toto_forecast
 
 __all__ = [
     "build_hier_base_forecaster",
@@ -35,4 +36,6 @@ __all__ = [
     "store_cat_cv",
     "store_cv",
     "store_dept_cv",
+    "toto_cv",
+    "toto_forecast",
 ]

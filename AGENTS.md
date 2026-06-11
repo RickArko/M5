@@ -53,9 +53,26 @@ uv run m5 download
 uv run m5 prep --last-n-days 400 --n-series -1
 uv run m5 cv lgbm  --horizon 28 --n-windows 3
 uv run m5 forecast lgbm --horizon 28
+uv run m5 cv toto  --horizon 28 --n-windows 3   # needs --group toto
+uv run m5 forecast toto                           # needs --group toto
 uv run m5 train
 uv run m5 serve     # FastAPI on http://localhost:8000
 ```
+
+## TOTO (zero-shot foundation model)
+
+TOTO is DataDog's time series foundation model — no training required, forecasts
+directly from the last 512 days of context.  Requires the ``toto`` dep group:
+
+```bash
+uv run --group toto m5 cv toto --horizon 28 --n-windows 1
+uv run --group toto m5 forecast toto --horizon 28
+```
+
+TOTO commands are **not** capped like stats/lgbm — the model processes every
+series in batches, so subsample with ``M5_N_SERIES`` if RAM/VRAM is tight.
+Always run with ``--group toto`` (managed separately because ``toto-models``
+pulls PyTorch).
 
 ## Pipeline commands (capped for dev hardware)
 
@@ -82,6 +99,7 @@ src/m5/
   cv.py          → stats_cv / lgbm_cv / hier_cv. Always seeds first.
   models/stats.py        → Theta + AutoETS + SeasonalNaive @ season_length=7.
   models/lgbm.py         → MLForecast + LightGBM (Tweedie, deterministic).
+  models/toto.py         → TOTO 2.0 zero-shot foundation model (DataDog).
   models/hierarchical.py → Theta + BU / TD / MinT reconcilers.
   cli.py         → typer app: download | prep | cv | forecast | train | serve.
   serve/         → FastAPI service (see README.md "Serving the model").

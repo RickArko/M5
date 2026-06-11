@@ -130,14 +130,18 @@ def prep(
 @app.command()
 def cv(
     model: str = typer.Argument(
-        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept, toto."
     ),
     horizon: int = typer.Option(SETTINGS.horizon),
     n_windows: int = typer.Option(SETTINGS.n_windows),
     long_path: Path = typer.Option(None, help="Path to processed long parquet."),
+    context_length: int = typer.Option(
+        512, help="TOTO context lookback (days).  Used only with model='toto'."
+    ),
+    batch_size: int = typer.Option(32, help="TOTO inference batch size.  Used only with model='toto'."),
 ) -> None:
     """Run reproducible rolling-origin cross-validation."""
-    from m5.cv import hier_cv, lgbm_cv, stats_cv
+    from m5.cv import hier_cv, lgbm_cv, stats_cv, toto_cv
     from m5.evaluation import compute_components, wrmsse_for_models
     from m5.models.segmented import store_cat_cv, store_cv, store_dept_cv
 
@@ -156,9 +160,17 @@ def cv(
         cv_df = store_cat_cv(df, h=horizon, n_windows=n_windows)
     elif model == "store_dept":
         cv_df = store_dept_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "toto":
+        cv_df = toto_cv(
+            df,
+            h=horizon,
+            n_windows=n_windows,
+            context_length=context_length,
+            batch_size=batch_size,
+        )
     else:
         raise typer.BadParameter(
-            f"Unknown model: {model!r}. Use 'stats', 'lgbm', 'hier', 'segmented', 'store', 'store_cat', or 'store_dept'."
+            f"Unknown model: {model!r}. Use 'stats', 'lgbm', 'hier', 'segmented', 'store', 'store_cat', 'store_dept', or 'toto'."
         )
     components = compute_components(df[df["ds"] < cv_df["ds"].min()])
     truth = cv_df.rename(columns={"y": "y"})[["unique_id", "ds", "y"]]
@@ -369,16 +381,21 @@ def serve(
 @app.command()
 def forecast(
     model: str = typer.Argument(
-        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept, toto."
     ),
     horizon: int = typer.Option(SETTINGS.horizon),
     long_path: Path = typer.Option(None),
+    context_length: int = typer.Option(
+        512, help="TOTO context lookback (days).  Used only with model='toto'."
+    ),
+    batch_size: int = typer.Option(32, help="TOTO inference batch size.  Used only with model='toto'."),
 ) -> None:
     """Train on all available data and emit a future forecast."""
     from m5.models.hierarchical import fit_predict_hier
     from m5.models.lgbm import fit_predict_lgbm
     from m5.models.segmented import fit_predict_store, fit_predict_store_cat, fit_predict_store_dept
     from m5.models.stats import fit_predict_stats
+    from m5.models.toto import toto_forecast
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
     logger.info(f"forecast {model}: loading {long_path}")
@@ -397,6 +414,13 @@ def forecast(
         out_df = fit_predict_store_cat(df, horizon=horizon)
     elif model == "store_dept":
         out_df = fit_predict_store_dept(df, horizon=horizon)
+    elif model == "toto":
+        out_df = toto_forecast(
+            df,
+            horizon=horizon,
+            context_length=context_length,
+            batch_size=batch_size,
+        )
     else:
         raise typer.BadParameter(f"Unknown model: {model!r}.")
 

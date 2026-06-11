@@ -4,10 +4,10 @@
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap install activate lint fmt typecheck test test-smoke test-unit \
         test-integration test-fast cov check \
-        download prep cv-stats cv-lgbm cv-hier cv-recipe cv-segmented cv-store cv-store-cat cv-store-dept \
-        forecast-stats forecast-lgbm forecast-hier forecast-segmented forecast-store forecast-store-cat forecast-store-dept \
+        download prep cv-stats cv-lgbm cv-hier cv-recipe cv-segmented cv-store cv-store-cat cv-store-dept cv-toto \
+        forecast-stats forecast-lgbm forecast-hier forecast-segmented forecast-store forecast-store-cat forecast-store-dept forecast-toto \
         train serve serve-prod docker-build docker-up docker-down docker-logs \
-        score score-all compare compare-existing eval viz notebook clean clean-all
+        score score-all compare compare-existing eval viz notebook notebook-toto clean clean-all
 
 UV       ?= uv
 VENV     ?= .venv
@@ -130,6 +130,9 @@ cv-store-cat: ## Cross-validate 30 store-category LightGBM models
 cv-store-dept: ## Cross-validate 70 store-department LightGBM models
 	$(UV) run m5 cv store_dept --horizon $(HORIZON) --n-windows $(WINDOWS)
 
+cv-toto: ## Cross-validate the TOTO zero-shot foundation model (needs --group toto)
+	$(UV) run --group toto m5 cv toto --horizon $(HORIZON) --n-windows $(WINDOWS)
+
 forecast-stats: ## Train+predict statistical baselines
 	$(UV) run m5 forecast stats --horizon $(HORIZON)
 
@@ -150,6 +153,9 @@ forecast-store-cat: ## Train+predict 30 store-category LightGBM models
 
 forecast-store-dept: ## Train+predict 70 store-department LightGBM models
 	$(UV) run m5 forecast store_dept --horizon $(HORIZON)
+
+forecast-toto: ## Zero-shot forecast with TOTO (needs --group toto)
+	$(UV) run --group toto m5 forecast toto --horizon $(HORIZON)
 
 # ---- Serving (FastAPI) --------------------------------------------
 # `make train` produces a versioned artifact under artifacts/models/lgbm/<ts>/
@@ -282,6 +288,9 @@ viz: ## Render assets/pipeline.{svg,html} from the latest fitted artifact
 
 notebook: ## Launch Jupyter Lab with the notebook dep group
 	$(UV) run --group notebook jupyter lab
+
+notebook-toto: ## Launch Jupyter Lab with notebook + toto groups (TOTO notebook)
+	$(UV) run --group notebook --group toto jupyter lab
 
 # ---- Cleanup -------------------------------------------------------
 

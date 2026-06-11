@@ -98,6 +98,16 @@ loadtest = [
     "locust>=2.31",
     "pyyaml>=6.0",
 ]
+toto = [
+    # DataDog TOTO 2.0 time series foundation model (zero-shot).
+    # Requires PyTorch 2.5+ and a CUDA-capable GPU for best performance,
+    # but also runs on CPU. The ``toto-models`` package on PyPI bundles
+    # model weights and inference code.
+    "toto-models>=1.0.0",
+    # torch is pulled transitively via toto-models; pinning the minimum
+    # here keeps the constraint explicit.
+    "torch>=2.5",
+]
 
 # ----------------------------------------------------------------------
 # Tooling
@@ -142,6 +152,8 @@ module = [
     "utilsforecast.*",
     "datasetsforecast.*",
     "hierarchicalforecast.*",
+    "toto2.*",
+    "torch.*",
 ]
 follow_imports = "silent"
 ignore_errors = true

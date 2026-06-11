@@ -156,6 +156,50 @@ def hier_cv(
     return reconciled
 
 
+def toto_cv(
+    df: pd.DataFrame,
+    *,
+    h: int = SETTINGS.horizon,
+    n_windows: int = SETTINGS.n_windows,
+    step_size: int | None = None,
+    model_name: str = "Datadog/Toto-2.0-22m",
+    context_length: int = 512,
+    batch_size: int = 32,
+) -> pd.DataFrame:
+    """Rolling-origin CV with the TOTO zero-shot foundation model.
+
+    Because TOTO is a pre-trained foundation model (no training step), each
+    CV window slices the trailing *context_length* days as input and forecasts
+    forward *h* steps.  Results follow the same Nixtla CV format as
+    :func:`stats_cv` / :func:`lgbm_cv`.
+
+    Parameters
+    ----------
+    model_name:
+        HuggingFace model identifier.  Defaults to the 22M-parameter variant.
+    context_length:
+        Lookback window (days) fed to the model per series.
+    batch_size:
+        Number of series per inference batch.  Reduce on GPU OOM.
+    """
+    from m5.models.toto import toto_cv as _toto_cv
+
+    set_global_seed()
+    logger.info(
+        f"toto_cv: h={h} n_windows={n_windows} step={step_size or h} "
+        f"model={model_name} context={context_length}"
+    )
+    return _toto_cv(
+        df,
+        h=h,
+        n_windows=n_windows,
+        step_size=step_size,
+        model_name=model_name,
+        context_length=context_length,
+        batch_size=batch_size,
+    )
+
+
 # ----------------------------------------------------------------------
 # Recipe-driven dispatcher (Phase 3)
 # ----------------------------------------------------------------------
