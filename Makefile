@@ -31,7 +31,7 @@ help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "; \
 	             printf "\nM5 Forecasting — make targets\n\nUsage: make <target> [VAR=value]\n\n"} \
 	     /^[a-zA-Z_.-]+:.*?## / {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf "\nVariables (override on CLI): HORIZON=%s WINDOWS=%s MODEL=%s\n\n" \
+	@printf "\nVariables (override on CLI): HORIZON=%s WINDOWS=%s MODEL=%s ALPHA=0.1\n\n" \
 	        "$(HORIZON)" "$(WINDOWS)" "$(MODEL)"
 
 # ---- Setup ---------------------------------------------------------
@@ -142,6 +142,9 @@ forecast-lgbm: ## Train+predict LightGBM global model
 forecast-hier: ## Train+predict hierarchical (Theta base, 4 reconcilers)
 	$(UV) run m5 forecast hier --horizon $(HORIZON)
 
+forecast-intervals: ## Forecast + conformal intervals (MODEL=lgbm, ALPHA=0.1)
+	$(UV) run m5 forecast $(MODEL) --horizon $(HORIZON) --with-intervals --intervals-alpha $(ALPHA)
+
 forecast-segmented: ## Train+predict 10 store-level LightGBM models
 	$(UV) run m5 forecast segmented --horizon $(HORIZON)
 
@@ -156,6 +159,20 @@ forecast-store-dept: ## Train+predict 70 store-department LightGBM models
 
 forecast-toto: ## Zero-shot forecast with TOTO (needs --group toto)
 	$(UV) run --group toto m5 forecast toto --horizon $(HORIZON)
+
+ALPHA ?= 0.1
+
+calibrate: ## Fit a conformal calibrator from CV residuals (MODEL=stats, ALPHA=0.1)
+	$(UV) run m5 calibrate $(MODEL) --alpha $(ALPHA)
+
+calibrate-stats: ## Fit conformal calibrator for stats models
+	$(UV) run m5 calibrate stats --alpha $(ALPHA)
+
+calibrate-lgbm: ## Fit conformal calibrator for LightGBM
+	$(UV) run m5 calibrate lgbm --alpha $(ALPHA)
+
+calibrate-hier: ## Fit conformal calibrator for hierarchical models
+	$(UV) run m5 calibrate hier --alpha $(ALPHA)
 
 # ---- Serving (FastAPI) --------------------------------------------
 # `make train` produces a versioned artifact under artifacts/models/lgbm/<ts>/
