@@ -301,7 +301,7 @@ def main() -> None:
     fva = fva_scores(inp, baseline=baseline, metric="mae") if baseline else pd.DataFrame()
 
     payload = {
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(UTC).strftime("%B %d, %Y at %H:%M UTC"),
         "source": {
             "mode": "generated",
             "cv_files": files,

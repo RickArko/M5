@@ -7,7 +7,8 @@
         download prep cv-stats cv-lgbm cv-hier cv-recipe cv-segmented cv-store cv-store-cat cv-store-dept cv-toto \
         forecast-stats forecast-lgbm forecast-hier forecast-segmented forecast-store forecast-store-cat forecast-store-dept forecast-toto \
         train serve serve-prod docker-build docker-up docker-down docker-logs \
-        score score-all compare compare-existing eval viz notebook notebook-toto clean clean-all
+        score         score-all compare compare-existing eval viz notebook notebook-toto clean clean-all \
+        fe-dev fe-export pipeline-all
 
 UV       ?= uv
 VENV     ?= .venv
@@ -188,6 +189,15 @@ serve: ## Run the FastAPI service in dev mode (uvicorn --reload)
 serve-prod: ## Run the FastAPI service with prod-style settings (no reload, multi-worker via env)
 	M5_SERVE_LOG_JSON=true $(UV) run m5 serve
 
+# ---- Frontend (Vue Dashboard) ---------------------------------------
+
+fe-dev: ## Clean stale dashboard JSON and start the Vite dev server
+	rm -f frontend/public/data/accuracy-dashboard.json
+	cd frontend && npm run dev
+
+fe-export: ## Re-export dashboard data from CV artifacts and start Vite dev server
+	cd frontend && npm run export:data && npm run dev
+
 docker-build: ## Build the production container image (m5-forecaster:local)
 	docker build -t m5-forecaster:local .
 
@@ -247,6 +257,12 @@ compare: ## Run all CVs + build ensemble + score + print comparison table
 		--model stats --model lgbm --model store --model store_cat --model ensemble
 	@echo "==> Comparison table"
 	$(UV) run python scripts/compare_scores.py $(REPORT) --baseline lgbm
+
+# ---- Pipeline (all models + dashboard) ------------------------------
+
+pipeline-all: ## Prep + all model CVs + dashboard export (capped for dev). Override M5_N_SERIES=-1 M5_LAST_N_DAYS=-1 WINDOWS=3 for full data.
+	$(MAKE) M5_N_SERIES=500 M5_LAST_N_DAYS=200 WINDOWS=1 prep cv-stats cv-lgbm cv-hier cv-toto
+	cd frontend && npm run export:data
 
 # ---- Load test (phase 1: local; phases 2-3 add GCP tier sweep) -----
 # Plan: docs/plans/api_loadtest.md. Generate the payload corpus once

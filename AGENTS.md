@@ -59,6 +59,17 @@ uv run m5 train
 uv run m5 serve     # FastAPI on http://localhost:8000
 ```
 
+## Frontend (Vue Dashboard)
+
+```bash
+make fe-dev       # rm stale dashboard JSON + start Vite dev server
+make fe-export    # re-export dashboard data from CV artifacts + start Vite
+```
+
+The fallback sample data lives in `frontend/public/data/accuracy-dashboard.sample.json`.
+If a stale `accuracy-dashboard.json` (from a prior export) exists, it takes priority —
+`make fe-dev` cleans it first.
+
 ## TOTO (zero-shot foundation model)
 
 TOTO is DataDog's time series foundation model — no training required, forecasts
@@ -79,6 +90,12 @@ pulls PyTorch).
 ```bash
 # Cheap: run end-to-end on a subsample (~1–2 min)
 M5_N_SERIES=500 M5_LAST_N_DAYS=200 M5_N_WINDOWS=1 make prep cv-lgbm
+
+# All models + dashboard export (stats, lgbm, hier, toto, export)
+make pipeline-all
+
+# Same but full data — only on remote / cloud nodes
+make pipeline-all M5_N_SERIES=-1 M5_LAST_N_DAYS=-1 WINDOWS=3
 
 # Expensive: full data — only on remote / cloud nodes
 make prep cv-lgbm

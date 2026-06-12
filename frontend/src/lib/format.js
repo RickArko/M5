@@ -18,5 +18,8 @@ export function signed(value, digits = 2) {
 }
 
 export function modelLabel(model) {
-  return String(model).replaceAll('_', ' / ')
+  const label = String(model).replaceAll('_', ' / ')
+  if (label === 'toto / TOTO') return 'TOTO'
+  if (label === 'lgbm / LGBM') return 'LightGBM'
+  return label
 }
