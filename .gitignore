@@ -26,6 +26,7 @@ htmlcov/
 coverage.xml
 .cache/
 node_modules/
+frontend/.vite/
 
 # --- Jupyter --------------------------------------------------------
 .ipynb_checkpoints/
