@@ -68,8 +68,11 @@ case "$M5_ARTIFACT_DEST" in
         apt-get install -y --no-install-recommends google-cloud-cli
         ;;
     s3://*)
-        echo "==> installing awscli (for s3:// push)"
-        apt-get install -y --no-install-recommends awscli
+        echo "==> installing awscli v2 (for s3:// push)"
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+        unzip -q /tmp/awscliv2.zip -d /tmp
+        /tmp/aws/install --update
+        rm -rf /tmp/awscliv2.zip /tmp/aws
         ;;
     az://*)
         echo "==> installing azure-cli (for az:// push)"
