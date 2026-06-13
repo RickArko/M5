@@ -143,7 +143,7 @@ def build_long_frame(
     long = long.sort_values(["unique_id", "ds"]).reset_index(drop=True)
 
     long = _drop_leading_zeros(long)
-    if last_n_days is not None:
+    if last_n_days is not None and last_n_days > 0:
         cutoff = long["ds"].max() - pd.Timedelta(days=int(last_n_days))
         long = long[long["ds"] >= cutoff].reset_index(drop=True)
         logger.info(f"Kept last {last_n_days:,d} days → {len(long):,d} rows.")
