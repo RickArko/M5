@@ -49,7 +49,7 @@ class TestTotoForecast:
     def test_forecast_returns_expected_columns(self, toy_long: pd.DataFrame) -> None:
         from m5.models.toto import toto_forecast
 
-        fcast = toto_forecast(toy_long, horizon=7, context_length=100, batch_size=3)
+        fcast = toto_forecast(toy_long, horizon=7, context_length=128, batch_size=3)
         assert isinstance(fcast, pd.DataFrame)
         assert "unique_id" in fcast.columns
         assert "ds" in fcast.columns
@@ -60,7 +60,7 @@ class TestTotoForecast:
     def test_forecast_values_are_finite(self, toy_long: pd.DataFrame) -> None:
         from m5.models.toto import toto_forecast
 
-        fcast = toto_forecast(toy_long, horizon=7, context_length=100, batch_size=3)
+        fcast = toto_forecast(toy_long, horizon=7, context_length=128, batch_size=3)
         vals = fcast["TOTO"].values
         assert not np.any(np.isnan(vals)), "NaN values in TOTO forecast"
         assert not np.any(np.isinf(vals)), "Inf values in TOTO forecast"
@@ -68,8 +68,8 @@ class TestTotoForecast:
     def test_forecast_reproducible(self, toy_long: pd.DataFrame) -> None:
         from m5.models.toto import toto_forecast
 
-        f1 = toto_forecast(toy_long, horizon=7, context_length=100, batch_size=3)
-        f2 = toto_forecast(toy_long, horizon=7, context_length=100, batch_size=3)
+        f1 = toto_forecast(toy_long, horizon=7, context_length=128, batch_size=3)
+        f2 = toto_forecast(toy_long, horizon=7, context_length=128, batch_size=3)
         pd.testing.assert_frame_equal(f1, f2)
 
 
@@ -79,7 +79,7 @@ class TestTotoCV:
     def test_cv_returns_expected_columns(self, toy_long: pd.DataFrame) -> None:
         from m5.models.toto import toto_cv
 
-        cv_df = toto_cv(toy_long, h=7, n_windows=2, step_size=7, context_length=100, batch_size=3)
+        cv_df = toto_cv(toy_long, h=7, n_windows=2, step_size=7, context_length=128, batch_size=3)
         assert "unique_id" in cv_df.columns
         assert "ds" in cv_df.columns
         assert "cutoff" in cv_df.columns
@@ -91,7 +91,7 @@ class TestTotoCV:
     def test_cv_scorable(self, toy_long: pd.DataFrame) -> None:
         from m5.models.toto import toto_cv
 
-        cv_df = toto_cv(toy_long, h=7, n_windows=2, step_size=7, context_length=100, batch_size=3)
+        cv_df = toto_cv(toy_long, h=7, n_windows=2, step_size=7, context_length=128, batch_size=3)
         train_pre_cv = toy_long[toy_long["ds"] < cv_df["ds"].min()]
         components = compute_components(train_pre_cv)
         truth = cv_df[["unique_id", "ds", "y"]]
