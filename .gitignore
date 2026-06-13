@@ -25,6 +25,7 @@ MANIFEST
 htmlcov/
 coverage.xml
 .cache/
+node_modules/
 
 # --- Jupyter --------------------------------------------------------
 .ipynb_checkpoints/
@@ -42,8 +43,12 @@ DS-CaseStudy-SalesForecast/
 artifacts/
 forecasts/
 reports/
+frontend/dist/
 *.parquet
 *.csv
+!frontend/public/data/
+!frontend/public/data/accuracy-dashboard.sample.json
+frontend/public/data/accuracy-dashboard.json
 !tests/fixtures/*.csv
 !tests/fixtures/*.parquet
 

@@ -67,7 +67,26 @@ def lgbm_cv(
     df = encode_static_categoricals(df, statics_present)
     logger.info(f"lgbm_cv: h={h} n_windows={n_windows} step={step_size or h}")
     keep = ["unique_id", "ds", "y", *statics_present]
-    keep += [c for c in ("snap", "is_event", "price_norm", "price_change_pct") if c in df.columns]
+    dynamic_candidates = [
+        "snap",
+        "is_event",
+        "price_norm",
+        "price_change_pct",
+        "days_to_next_event",
+        "days_since_last_event",
+        "week_of_month",
+        "price_mean",
+        "price_min",
+        "price_max",
+        "price_rank_in_store",
+        "days_since_release",
+        "cat_id_mean_dow",
+        "dept_id_mean_dow",
+        "store_id_mean_dow",
+        "state_id_mean_dow",
+        "store_cat_mean_dow",
+    ]
+    keep += [c for c in dynamic_candidates if c in df.columns]
     return fcst.cross_validation(
         df=df[keep],
         h=h,

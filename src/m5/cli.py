@@ -49,13 +49,19 @@ def _load_cv_files(model_names: list[str], artifacts_dir: Path) -> tuple[pd.Data
 
     base = frames[0][1][list(_CV_KEY_COLS)].copy()
     forecast_cols: list[str] = []
-    for _, df in frames:
-        for c in df.columns:
-            if c in _CV_KEY_COLS or c in forecast_cols:
-                continue
-            forecast_cols.append(c)
     merged = base
-    for _, df in frames:
+    for m, df in frames:
+        # Rename forecast columns to avoid collisions across CV files.
+        # e.g. LGBM from cv_lgbm -> lgbm_LGBM, LGBM from cv_store -> store_LGBM
+        rename_map: dict[str, str] = {}
+        for c in df.columns:
+            if c in _CV_KEY_COLS:
+                continue
+            new_name = f"{m}_{c}"
+            rename_map[c] = new_name
+            forecast_cols.append(new_name)
+        if rename_map:
+            df = df.rename(columns=rename_map)
         cols = [c for c in df.columns if c not in _CV_KEY_COLS]
         merged = merged.merge(
             df[["unique_id", "ds", "cutoff", *cols]],
@@ -123,7 +129,9 @@ def prep(
 
 @app.command()
 def cv(
-    model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),
+    model: str = typer.Argument(
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+    ),
     horizon: int = typer.Option(SETTINGS.horizon),
     n_windows: int = typer.Option(SETTINGS.n_windows),
     long_path: Path = typer.Option(None, help="Path to processed long parquet."),
@@ -131,6 +139,7 @@ def cv(
     """Run reproducible rolling-origin cross-validation."""
     from m5.cv import hier_cv, lgbm_cv, stats_cv
     from m5.evaluation import compute_components, wrmsse_for_models
+    from m5.models.segmented import store_cat_cv, store_cv, store_dept_cv
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
     df = pd.read_parquet(long_path)
@@ -141,8 +150,16 @@ def cv(
         cv_df = lgbm_cv(df, h=horizon, n_windows=n_windows)
     elif model == "hier":
         cv_df = hier_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "segmented" or model == "store":
+        cv_df = store_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "store_cat":
+        cv_df = store_cat_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "store_dept":
+        cv_df = store_dept_cv(df, h=horizon, n_windows=n_windows)
     else:
-        raise typer.BadParameter(f"Unknown model: {model!r}. Use 'stats', 'lgbm', or 'hier'.")
+        raise typer.BadParameter(
+            f"Unknown model: {model!r}. Use 'stats', 'lgbm', 'hier', 'segmented', 'store', 'store_cat', or 'store_dept'."
+        )
     components = compute_components(df[df["ds"] < cv_df["ds"].min()])
     truth = cv_df.rename(columns={"y": "y"})[["unique_id", "ds", "y"]]
     scores = wrmsse_for_models(truth, cv_df, components)
@@ -351,13 +368,16 @@ def serve(
 
 @app.command()
 def forecast(
-    model: str = typer.Argument("stats", help="One of: stats, lgbm, hier."),
+    model: str = typer.Argument(
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+    ),
     horizon: int = typer.Option(SETTINGS.horizon),
     long_path: Path = typer.Option(None),
 ) -> None:
     """Train on all available data and emit a future forecast."""
     from m5.models.hierarchical import fit_predict_hier
     from m5.models.lgbm import fit_predict_lgbm
+    from m5.models.segmented import fit_predict_store, fit_predict_store_cat, fit_predict_store_dept
     from m5.models.stats import fit_predict_stats
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
@@ -371,6 +391,12 @@ def forecast(
         out_df = fit_predict_lgbm(df, horizon=horizon)
     elif model == "hier":
         out_df = fit_predict_hier(df, horizon=horizon)
+    elif model in ("segmented", "store"):
+        out_df = fit_predict_store(df, horizon=horizon)
+    elif model == "store_cat":
+        out_df = fit_predict_store_cat(df, horizon=horizon)
+    elif model == "store_dept":
+        out_df = fit_predict_store_dept(df, horizon=horizon)
     else:
         raise typer.BadParameter(f"Unknown model: {model!r}.")
 
@@ -378,6 +404,58 @@ def forecast(
     out.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(out, index=False)
     logger.info(f"Wrote {out} ({len(out_df):,d} rows).")
+
+
+@app.command()
+def ensemble(
+    models: list[str] = typer.Option(
+        ...,
+        "--model",
+        "-m",
+        help="Artifact base name (reads artifacts/cv_<name>.parquet). Repeat for multiple.",
+    ),
+    weights: list[float] | None = typer.Option(
+        None,
+        "--weight",
+        "-w",
+        help="Weight per model. If omitted, equal weights are used. Must match number of models.",
+    ),
+    out_name: str = typer.Option(
+        "ensemble", help="Output artifact base name (writes artifacts/cv_<out_name>.parquet)."
+    ),
+    artifacts_dir: Path = typer.Option(None, help="Directory containing cv_*.parquet files."),
+) -> None:
+    """Average multiple CV artifacts into a single ensemble forecast.
+
+    Reads ``cv_<model>.parquet`` for each ``--model``, aligns them on
+    ``(unique_id, ds, cutoff)``, computes a weighted average of the forecast
+    columns, and writes ``cv_<out_name>.parquet`` with a single
+    ``<out_name>`` column. The resulting artifact can be scored alongside
+    the individual models via ``m5 score --model <out_name>``.
+    """
+    ad = artifacts_dir or SETTINGS.artifacts_dir
+    merged, forecast_cols = _load_cv_files(models, ad)
+
+    if weights is None:
+        weights = [1.0 / len(forecast_cols)] * len(forecast_cols)
+    elif len(weights) != len(forecast_cols):
+        raise typer.BadParameter(
+            f"Number of weights ({len(weights)}) must match number of forecast columns ({len(forecast_cols)})."
+        )
+    total = sum(weights)
+    if total == 0:
+        raise typer.BadParameter("Weights must not sum to zero.")
+    weights = [w / total for w in weights]
+
+    logger.info(f"ensemble: averaging {len(forecast_cols)} columns with weights {weights}")
+    merged[out_name] = sum(merged[col] * w for col, w in zip(forecast_cols, weights, strict=True))
+
+    # Keep only the key columns + the ensemble column
+    out_cols = ["unique_id", "ds", "cutoff", "y", out_name]
+    out_df = merged[out_cols].copy()
+    out_path = ad / f"cv_{out_name}.parquet"
+    out_df.to_parquet(out_path, index=False)
+    logger.info(f"ensemble: wrote {out_path} ({len(out_df):,d} rows)")
 
 
 @app.command()
