@@ -49,7 +49,7 @@ resource "aws_key_pair" "m5" {
 # ----------------------------------------------------------------------------
 resource "aws_security_group" "train" {
   name        = "m5-train"
-  description = "M5 training VM — SSH only"
+  description = "M5 training VM - SSH only"
   vpc_id      = local.vpc_id
   tags        = { Project = "m5", Role = "train" }
 
@@ -70,7 +70,7 @@ resource "aws_security_group" "train" {
 
 resource "aws_security_group" "serve" {
   name        = "m5-serve"
-  description = "M5 serve VM — SSH + FastAPI"
+  description = "M5 serve VM - SSH + FastAPI"
   vpc_id      = local.vpc_id
   tags        = { Project = "m5", Role = "serve" }
 
@@ -97,28 +97,12 @@ resource "aws_security_group" "serve" {
 }
 
 # ----------------------------------------------------------------------------
-# S3 bucket for artifact handoff
+# S3 bucket for artifact handoff (must be pre-created)
 # ----------------------------------------------------------------------------
-resource "aws_s3_bucket" "artifact" {
+# The bucket is created by scripts/create_s3_bucket.sh before terraform apply.
+# This data source looks up the existing bucket.
+data "aws_s3_bucket" "artifact" {
   bucket = var.artifact_bucket_name
-  tags   = { Project = "m5" }
-}
-
-resource "aws_s3_bucket_public_access_block" "artifact" {
-  bucket                  = aws_s3_bucket.artifact.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "artifact" {
-  bucket = aws_s3_bucket.artifact.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
 }
 
 # ----------------------------------------------------------------------------
@@ -143,7 +127,7 @@ resource "aws_iam_role" "vm" {
 data "aws_iam_policy_document" "vm" {
   statement {
     actions   = ["s3:ListBucket"]
-    resources = [aws_s3_bucket.artifact.arn]
+    resources = [data.aws_s3_bucket.artifact.arn]
   }
   statement {
     actions = [
@@ -151,7 +135,7 @@ data "aws_iam_policy_document" "vm" {
       "s3:PutObject",
       "s3:DeleteObject",
     ]
-    resources = ["${aws_s3_bucket.artifact.arn}/*"]
+    resources = ["${data.aws_s3_bucket.artifact.arn}/*"]
   }
 }
 
@@ -171,7 +155,7 @@ resource "aws_iam_instance_profile" "vm" {
 # ----------------------------------------------------------------------------
 locals {
   user_data_template = "${path.module}/../../cloud-init/_user_data.sh.tftpl"
-  artifact_uri       = "s3://${aws_s3_bucket.artifact.id}/${var.artifact_prefix}"
+  artifact_uri       = "s3://${data.aws_s3_bucket.artifact.id}/${var.artifact_prefix}"
 
   user_data_train = templatefile(local.user_data_template, {
     role                  = "train"

@@ -1,11 +1,11 @@
 output "artifact_bucket" {
   description = "S3 bucket holding the trained artifact."
-  value       = aws_s3_bucket.artifact.id
+  value       = data.aws_s3_bucket.artifact.id
 }
 
 output "artifact_uri" {
   description = "Full s3:// URI for the artifact prefix."
-  value       = "s3://${aws_s3_bucket.artifact.id}/${var.artifact_prefix}"
+  value       = "s3://${data.aws_s3_bucket.artifact.id}/${var.artifact_prefix}"
 }
 
 output "train_public_ip" {
