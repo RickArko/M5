@@ -130,14 +130,18 @@ def prep(
 @app.command()
 def cv(
     model: str = typer.Argument(
-        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept, toto."
     ),
     horizon: int = typer.Option(SETTINGS.horizon),
     n_windows: int = typer.Option(SETTINGS.n_windows),
     long_path: Path = typer.Option(None, help="Path to processed long parquet."),
+    context_length: int = typer.Option(
+        512, help="TOTO context lookback (days).  Used only with model='toto'."
+    ),
+    batch_size: int = typer.Option(32, help="TOTO inference batch size.  Used only with model='toto'."),
 ) -> None:
     """Run reproducible rolling-origin cross-validation."""
-    from m5.cv import hier_cv, lgbm_cv, stats_cv
+    from m5.cv import hier_cv, lgbm_cv, stats_cv, toto_cv
     from m5.evaluation import compute_components, wrmsse_for_models
     from m5.models.segmented import store_cat_cv, store_cv, store_dept_cv
 
@@ -156,9 +160,17 @@ def cv(
         cv_df = store_cat_cv(df, h=horizon, n_windows=n_windows)
     elif model == "store_dept":
         cv_df = store_dept_cv(df, h=horizon, n_windows=n_windows)
+    elif model == "toto":
+        cv_df = toto_cv(
+            df,
+            h=horizon,
+            n_windows=n_windows,
+            context_length=context_length,
+            batch_size=batch_size,
+        )
     else:
         raise typer.BadParameter(
-            f"Unknown model: {model!r}. Use 'stats', 'lgbm', 'hier', 'segmented', 'store', 'store_cat', or 'store_dept'."
+            f"Unknown model: {model!r}. Use 'stats', 'lgbm', 'hier', 'segmented', 'store', 'store_cat', 'store_dept', or 'toto'."
         )
     components = compute_components(df[df["ds"] < cv_df["ds"].min()])
     truth = cv_df.rename(columns={"y": "y"})[["unique_id", "ds", "y"]]
@@ -369,16 +381,35 @@ def serve(
 @app.command()
 def forecast(
     model: str = typer.Argument(
-        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept."
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept, toto."
     ),
     horizon: int = typer.Option(SETTINGS.horizon),
     long_path: Path = typer.Option(None),
+    context_length: int = typer.Option(
+        512, help="TOTO context lookback (days).  Used only with model='toto'."
+    ),
+    batch_size: int = typer.Option(32, help="TOTO inference batch size.  Used only with model='toto'."),
+    with_intervals: bool = typer.Option(
+        False, "--with-intervals", help="Also output conformal prediction intervals."
+    ),
+    intervals_alpha: float = typer.Option(
+        0.1, "--intervals-alpha", help="Miscoverage rate for prediction intervals."
+    ),
+    intervals_method: str = typer.Option(
+        "pooled", "--intervals-method", help="Calibration method: pooled, scaled."
+    ),
+    calibrator_path: Path = typer.Option(
+        None,
+        "--calibrator-path",
+        help="Path to a pre-fitted calibrator. If omitted, calibration is done from CV artifacts.",
+    ),
 ) -> None:
     """Train on all available data and emit a future forecast."""
     from m5.models.hierarchical import fit_predict_hier
     from m5.models.lgbm import fit_predict_lgbm
     from m5.models.segmented import fit_predict_store, fit_predict_store_cat, fit_predict_store_dept
     from m5.models.stats import fit_predict_stats
+    from m5.models.toto import toto_forecast
 
     long_path = long_path or SETTINGS.processed_dir / "long.parquet"
     logger.info(f"forecast {model}: loading {long_path}")
@@ -397,13 +428,84 @@ def forecast(
         out_df = fit_predict_store_cat(df, horizon=horizon)
     elif model == "store_dept":
         out_df = fit_predict_store_dept(df, horizon=horizon)
+    elif model == "toto":
+        out_df = toto_forecast(
+            df,
+            horizon=horizon,
+            context_length=context_length,
+            batch_size=batch_size,
+        )
     else:
         raise typer.BadParameter(f"Unknown model: {model!r}.")
+
+    if with_intervals:
+        from m5.conformal import ConformalCalibrator
+
+        if calibrator_path is not None:
+            import joblib
+
+            cal = joblib.load(calibrator_path)
+        else:
+            cv_path = SETTINGS.artifacts_dir / f"cv_{model}.parquet"
+            if not cv_path.exists():
+                raise typer.BadParameter(
+                    f"CV artifact {cv_path} not found — needed for calibration. "
+                    f"Run `m5 cv {model}` first or pass a --calibrator-path."
+                )
+            cv_df = pd.read_parquet(cv_path)
+            cv_df["ds"] = pd.to_datetime(cv_df["ds"])
+            cv_df["cutoff"] = pd.to_datetime(cv_df["cutoff"])
+            model_col = next(c for c in cv_df.columns if c not in ("unique_id", "ds", "cutoff", "y"))
+            cal = ConformalCalibrator(alpha=intervals_alpha, method=intervals_method)
+            cal.fit(cv_df, model_col=model_col)
+
+        out_df = cal.predict(out_df)
 
     out = SETTINGS.forecasts_dir / f"forecast_{model}.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(out, index=False)
     logger.info(f"Wrote {out} ({len(out_df):,d} rows).")
+
+
+@app.command()
+def calibrate(
+    model: str = typer.Argument(
+        "stats", help="One of: stats, lgbm, hier, segmented, store, store_cat, store_dept, toto."
+    ),
+    alpha: float = typer.Option(0.1, "--alpha", help="Miscoverage rate (1 - α confidence)."),
+    method: str = typer.Option("pooled", "--method", help="Calibration method: pooled, scaled."),
+    out: Path = typer.Option(None, help="Output path for the fitted calibrator."),
+    cv_path: Path = typer.Option(None, help="Path to a CV artifact (default: artifacts/cv_<model>.parquet)."),
+) -> None:
+    """Fit a conformal calibrator from CV residuals and persist it for later use.
+
+    Reads the rolling-origin CV output for a model, computes residuals,
+    and fits a ConformalCalibrator.  The calibrator can be loaded later
+    by ``m5 forecast <model> --with-intervals --calibrator-path <path>``.
+    """
+    import joblib
+
+    from m5.conformal import ConformalCalibrator
+
+    src = cv_path or SETTINGS.artifacts_dir / f"cv_{model}.parquet"
+    if not src.exists():
+        raise typer.BadParameter(f"CV artifact not found: {src} — run `m5 cv {model}` first.")
+    logger.info(f"calibrate: loading {src}")
+    cv_df = pd.read_parquet(src)
+    cv_df["ds"] = pd.to_datetime(cv_df["ds"])
+    cv_df["cutoff"] = pd.to_datetime(cv_df["cutoff"])
+
+    model_col = next(c for c in cv_df.columns if c not in ("unique_id", "ds", "cutoff", "y"))
+    logger.info(f"calibrate: fitting {method} calibrator (alpha={alpha}) for {model_col!r}")
+
+    cal = ConformalCalibrator(alpha=alpha, method=method)
+    cal.fit(cv_df, model_col=model_col)
+    logger.info(f"calibrate: fitted horizon={cal.horizon} steps")
+
+    out_path = out or SETTINGS.artifacts_dir / f"calibration_{model}.joblib"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(cal, out_path)
+    logger.info(f"calibrate: wrote {out_path}")
 
 
 @app.command()

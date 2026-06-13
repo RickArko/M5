@@ -35,6 +35,10 @@ class ServeSettings(BaseSettings):
         default_factory=lambda: REPO_ROOT / "artifacts" / "models" / "lgbm" / "latest",
         description="Directory containing model.joblib + metadata.json + history.parquet + statics.parquet.",
     )
+    model_kind: str = Field(
+        default="lgbm",
+        description="Model kind: 'lgbm' (MLForecast artifact) or 'toto' (zero-shot TOTO — experimental).",
+    )
 
     # --- Bind -------------------------------------------------------
     host: str = "0.0.0.0"

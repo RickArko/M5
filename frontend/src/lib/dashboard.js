@@ -43,9 +43,13 @@ export function availableValues(rows, key) {
 }
 
 export async function loadDashboardData() {
-  const primary = await fetch('/data/accuracy-dashboard.json')
-  if (primary.ok) return primary.json()
+  const resp = await fetch('/data/accuracy-dashboard.json')
+  if (resp.ok && resp.headers.get('content-type')?.startsWith('application/json')) {
+    return resp.json()
+  }
   const sample = await fetch('/data/accuracy-dashboard.sample.json')
-  if (!sample.ok) throw new Error('No dashboard data found. Run `npm run export:data`.')
-  return sample.json()
+  if (sample.ok && sample.headers.get('content-type')?.startsWith('application/json')) {
+    return sample.json()
+  }
+  throw new Error('No dashboard data found. Run `npm run export:data`.')
 }

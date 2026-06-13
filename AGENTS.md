@@ -53,15 +53,49 @@ uv run m5 download
 uv run m5 prep --last-n-days 400 --n-series -1
 uv run m5 cv lgbm  --horizon 28 --n-windows 3
 uv run m5 forecast lgbm --horizon 28
+uv run m5 cv toto  --horizon 28 --n-windows 3   # needs --group toto
+uv run m5 forecast toto                           # needs --group toto
 uv run m5 train
 uv run m5 serve     # FastAPI on http://localhost:8000
 ```
+
+## Frontend (Vue Dashboard)
+
+```bash
+make fe-dev       # rm stale dashboard JSON + start Vite dev server
+make fe-export    # re-export dashboard data from CV artifacts + start Vite
+```
+
+The fallback sample data lives in `frontend/public/data/accuracy-dashboard.sample.json`.
+If a stale `accuracy-dashboard.json` (from a prior export) exists, it takes priority —
+`make fe-dev` cleans it first.
+
+## TOTO (zero-shot foundation model)
+
+TOTO is DataDog's time series foundation model — no training required, forecasts
+directly from the last 512 days of context.  Requires the ``toto`` dep group:
+
+```bash
+uv run --group toto m5 cv toto --horizon 28 --n-windows 1
+uv run --group toto m5 forecast toto --horizon 28
+```
+
+TOTO commands are **not** capped like stats/lgbm — the model processes every
+series in batches, so subsample with ``M5_N_SERIES`` if RAM/VRAM is tight.
+Always run with ``--group toto`` (managed separately because ``toto-models``
+pulls PyTorch).
 
 ## Pipeline commands (capped for dev hardware)
 
 ```bash
 # Cheap: run end-to-end on a subsample (~1–2 min)
 M5_N_SERIES=500 M5_LAST_N_DAYS=200 M5_N_WINDOWS=1 make prep cv-lgbm
+
+# All models + dashboard export (stats, lgbm, hier, toto, export)
+make pipeline-all
+
+# Same but full data — only on remote / cloud nodes
+make pipeline-all M5_N_SERIES=-1 M5_LAST_N_DAYS=-1 WINDOWS=3
 
 # Expensive: full data — only on remote / cloud nodes
 make prep cv-lgbm
@@ -82,6 +116,7 @@ src/m5/
   cv.py          → stats_cv / lgbm_cv / hier_cv. Always seeds first.
   models/stats.py        → Theta + AutoETS + SeasonalNaive @ season_length=7.
   models/lgbm.py         → MLForecast + LightGBM (Tweedie, deterministic).
+  models/toto.py         → TOTO 2.0 zero-shot foundation model (DataDog).
   models/hierarchical.py → Theta + BU / TD / MinT reconcilers.
   cli.py         → typer app: download | prep | cv | forecast | train | serve.
   serve/         → FastAPI service (see README.md "Serving the model").
