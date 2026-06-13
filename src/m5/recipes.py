@@ -236,7 +236,7 @@ def _instantiate_stats_model(spec: StatsModelSpec) -> Any:
     return cls(**kwargs)
 
 
-def build_stats_from_recipe(recipe: Recipe, *, n_jobs: int = -1) -> Any:
+def build_stats_from_recipe(recipe: Recipe, *, n_jobs: int = 1) -> Any:
     """Build a StatsForecast bundle from a recipe.
 
     Output matches :func:`m5.models.stats.build_stats_forecaster` exactly when
@@ -279,7 +279,7 @@ def _erm(method: str, lambda_reg: float = 0.01) -> Any:
     return ERM(method=method, lambda_reg=lambda_reg)
 
 
-def build_hier_base_from_recipe(recipe: Recipe, *, n_jobs: int = -1) -> Any:
+def build_hier_base_from_recipe(recipe: Recipe, *, n_jobs: int = 1) -> Any:
     """Build the base StatsForecast learner used at every hierarchy level."""
     if not isinstance(recipe.model, HierRecipe):
         raise TypeError(
@@ -308,7 +308,7 @@ class HierForecaster:
     reconcilers: list[Any]
 
 
-def build_forecaster(recipe: Recipe, *, seed: int | None = None, n_jobs: int = -1) -> Any:
+def build_forecaster(recipe: Recipe, *, seed: int | None = None, n_jobs: int = 1) -> Any:
     """Dispatch on ``recipe.model.kind`` and return the right forecaster.
 
     Returns:

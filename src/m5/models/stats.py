@@ -34,7 +34,7 @@ def build_stats_forecaster(
     *,
     season_length: int = DEFAULT_SEASON,
     freq: str = DEFAULT_FREQ,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> StatsForecast:
     """Theta + AutoETS + SeasonalNaive bundle from ``configs/m5/stats.yaml``."""
     recipe = _load_stats_recipe()
