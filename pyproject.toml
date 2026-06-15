@@ -87,7 +87,7 @@ serve = [
     # FastAPI + uvicorn[standard] (which pulls httptools/watchfiles/websockets/httpx).
     # We pin `fastapi[standard]` so the test suite can use `fastapi.testclient.TestClient`
     # (depends on httpx) without an extra dev dep.
-    "fastapi[standard]>=0.115",
+    "fastapi[standard]>=0.137.0",
     "uvicorn[standard]>=0.32",
     "pydantic-settings>=2.6",
     "prometheus-client>=0.21",
