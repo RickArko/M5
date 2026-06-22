@@ -3,6 +3,9 @@
 import warnings
 from importlib.metadata import PackageNotFoundError, version
 
+# Expose the backend at the package root for convenience.
+from m5.backend import B, Backend, nw
+
 # statsforecast 2.x has raw-string escape issues in a few docstrings; the warnings
 # fire at import time and are pure noise. Filter once, here, before any submodule
 # triggers a statsforecast import.
@@ -13,4 +16,4 @@ try:
 except PackageNotFoundError:  # editable install before metadata is built
     __version__ = "0.0.0+local"
 
-__all__ = ["__version__"]
+__all__ = ["B", "Backend", "__version__", "nw"]

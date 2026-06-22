@@ -1,238 +1,249 @@
 """Minimal feature set — date features, snap, event flag, price normaliser.
 
-Philosophy: keep the menu short. Lags/rolls are configured directly on the
-MLForecast model (see :mod:`m5.models.lgbm`) so there's exactly one place
-where temporal features are defined.
-
-Phase 2 additions (aggregation encodings, calendar distances, price stats,
-release date) follow the same rule: audit signal via CV diff before adding.
+All functions in this module are backend-agnostic — they accept and return
+native DataFrames (pandas/polars).  The public API preserves backward
+compatibility: when a pandas DataFrame is passed as input, a pandas
+DataFrame is returned.
 """
 
 from __future__ import annotations
 
+import functools
+
+import narwhals as nw
 import numpy as np
 import pandas as pd
+
+from m5.backend import B, Float32, Int8, Int16, String, to_pandas
+
+
+def _preserve_backend(func):
+    """Decorator: wraps *func* so it accepts native DataFrames, converts to
+    narwhals internally, and returns the same native type as the input."""
+
+    @functools.wraps(func)
+    def wrapper(df, *args, **kwargs):
+        is_pandas = isinstance(df, pd.DataFrame)
+        nw_df = B.from_native(df) if not isinstance(df, nw.DataFrame) else df
+        result = func(nw_df, *args, **kwargs)
+        return to_pandas(result) if is_pandas else result
+
+    return wrapper
+
 
 DATE_FEATURE_COLS = ("dayofweek", "day", "week", "month", "year", "is_weekend")
 SNAP_COLS = ("snap_CA", "snap_TX", "snap_WI")
 PRICE_COLS = ("sell_price", "price_norm", "price_change_pct")
 
-
-def add_date_features(df: pd.DataFrame, *, ds_col: str = "ds") -> pd.DataFrame:
-    s = df[ds_col]
-    df["dayofweek"] = s.dt.dayofweek.astype(np.int8)
-    df["day"] = s.dt.day.astype(np.int8)
-    df["week"] = s.dt.isocalendar().week.astype(np.int8)
-    df["month"] = s.dt.month.astype(np.int8)
-    df["year"] = s.dt.year.astype(np.int16)
-    df["is_weekend"] = (s.dt.dayofweek >= 5).astype(np.int8)
-    return df
+# Sentinel for missing event distances.
+_NO_EVENT: int = 999
 
 
-def add_snap_flag(df: pd.DataFrame) -> pd.DataFrame:
+# ── Date features ────────────────────────────────────────────────────
+
+
+@_preserve_backend
+def add_date_features(df, *, ds_col: str = "ds"):
+    """Add dayofweek, day, week, month, year, is_weekend from *ds_col*."""
+    wd = nw.col(ds_col).dt.weekday() - 1  # narwhals 1-7 → 0-6
+    ordinal = nw.col(ds_col).dt.ordinal_day()
+    return df.with_columns(
+        wd.cast(Int8).alias("dayofweek"),
+        nw.col(ds_col).dt.day().cast(Int8).alias("day"),
+        ((ordinal - wd + 10) // 7).cast(Int8).alias("week"),
+        nw.col(ds_col).dt.month().cast(Int8).alias("month"),
+        nw.col(ds_col).dt.year().cast(Int16).alias("year"),
+        (wd >= 5).cast(Int8).alias("is_weekend"),
+    )
+
+
+# ── Snap flag ─────────────────────────────────────────────────────────
+
+
+@_preserve_backend
+def add_snap_flag(df):
     """Per-row snap flag for the row's state — collapses 3 columns into 1."""
     if "state_id" not in df.columns:
         return df
-    state = df["state_id"].astype(str).str.upper()
-    snap = np.zeros(len(df), dtype=np.int8)
+    state_up = nw.col("state_id").cast(String).str.to_uppercase()
+    expr = nw.lit(0, dtype=Int8)
     for s in ("CA", "TX", "WI"):
         col = f"snap_{s}"
         if col in df.columns:
-            mask = state.eq(s).to_numpy()
-            snap[mask] = df.loc[mask, col].astype(np.int8).to_numpy()
-    df["snap"] = snap
-    return df
+            expr = nw.when(state_up == s).then(nw.col(col).cast(Int8)).otherwise(expr)
+    return df.with_columns(expr.alias("snap"))
 
 
-def add_event_flag(df: pd.DataFrame) -> pd.DataFrame:
+# ── Event flag ────────────────────────────────────────────────────────
+
+
+@_preserve_backend
+@_preserve_backend
+def add_event_flag(df):
     """Single binary flag for ``any event today`` — drops sparse multi-hot encoding."""
-    if "event_name_1" in df.columns:
-        df["is_event"] = (df["event_name_1"].astype(str) != "none").astype(np.int8)
-    return df
+    if "event_name_1" not in df.columns:
+        return df
+    return df.with_columns((nw.col("event_name_1").cast(String) != "none").cast(Int8).alias("is_event"))
 
 
-def add_price_features(df: pd.DataFrame) -> pd.DataFrame:
+# ── Price features ────────────────────────────────────────────────────
+
+
+@_preserve_backend
+def add_price_features(df):
     """Per-series price normalisation and week-over-week change."""
     if "sell_price" not in df.columns:
         return df
-
-    grp = df.groupby("unique_id", observed=True)["sell_price"]
-    df["price_norm"] = (df["sell_price"] / grp.transform("mean")).astype(np.float32)
-    df["price_change_pct"] = grp.pct_change(fill_method=None).fillna(0).astype(np.float32)
-    return df
-
-
-# ------------------------------------------------------------------
-# Phase 2 — expanded features (mean encodings, calendar, price, release)
-# ------------------------------------------------------------------
+    sp = nw.col("sell_price")
+    price_mean = sp.mean().over("unique_id")
+    pct_chg = (sp - sp.shift(1).over("unique_id")) / sp.shift(1).over("unique_id")
+    return df.with_columns(
+        (sp / price_mean).cast(Float32).alias("price_norm"),
+        pct_chg.fill_null(0).cast(Float32).alias("price_change_pct"),
+    )
 
 
-def add_mean_encoding_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Historical mean-sales encodings by (group, dayofweek).
+# ── Phase 2 — expanded features ───────────────────────────────────────
 
-    These are "static" in the sense that they are pre-computed from the
-    full history and then merged back — they do not leak future information.
-    """
-    if "y" not in df.columns or "dayofweek" not in df.columns:
+
+@_preserve_backend
+def add_mean_encoding_features(df):
+    """Historical mean-sales encodings by (group, dayofweek)."""
+    if "y" not in df.columns:
         return df
-
-    # Ensure dayofweek exists
     if "dayofweek" not in df.columns:
         df = add_date_features(df)
-
-    agg_levels = []
-    if "cat_id" in df.columns:
-        agg_levels.append("cat_id")
-    if "dept_id" in df.columns:
-        agg_levels.append("dept_id")
-    if "store_id" in df.columns:
-        agg_levels.append("store_id")
-    if "state_id" in df.columns:
-        agg_levels.append("state_id")
-
+    agg_levels: list[str] = []
+    for col in ("cat_id", "dept_id", "store_id", "state_id"):
+        if col in df.columns:
+            agg_levels.append(col)
     for level in agg_levels:
         name = f"{level}_mean_dow"
         if name in df.columns:
             continue
-        encoding = df.groupby([level, "dayofweek"], observed=True)["y"].mean().rename(name).astype(np.float32)
-        df = df.merge(encoding, on=[level, "dayofweek"], how="left")
-
-    # Two-way interaction: store + category
+        encoding = (
+            df.group_by(level, "dayofweek")
+            .agg(nw.col("y").mean().alias(name))
+            .with_columns(nw.col(name).cast(Float32))
+        )
+        df = df.join(encoding, on=[level, "dayofweek"], how="left")
     if "store_id" in df.columns and "cat_id" in df.columns:
         name = "store_cat_mean_dow"
         if name not in df.columns:
             encoding = (
-                df.groupby(["store_id", "cat_id", "dayofweek"], observed=True)["y"]
-                .mean()
-                .rename(name)
-                .astype(np.float32)
+                df.group_by("store_id", "cat_id", "dayofweek")
+                .agg(nw.col("y").mean().alias(name))
+                .with_columns(nw.col(name).cast(Float32))
             )
-            df = df.merge(encoding, on=["store_id", "cat_id", "dayofweek"], how="left")
-
+            df = df.join(encoding, on=["store_id", "cat_id", "dayofweek"], how="left")
     return df
 
 
-def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
+@_preserve_backend
+def add_calendar_features(df):
     """Calendar distance features — days to/from nearest event, week-of-month."""
     if "ds" not in df.columns:
         return df
-
-    s = df["ds"]
-
-    # Week of month (1-5)
     if "week_of_month" not in df.columns:
-        df["week_of_month"] = ((s.dt.day - 1) // 7 + 1).astype(np.int8)
-
-    # Days to next / since last event — requires is_event or event_name_1
+        df = df.with_columns(((nw.col("ds").dt.day() - 1) // 7 + 1).cast(Int8).alias("week_of_month"))
     has_event = "is_event" in df.columns or "event_name_1" in df.columns
     if has_event and ("days_to_next_event" not in df.columns or "days_since_last_event" not in df.columns):
         if "is_event" not in df.columns:
             df = add_event_flag(df)
-
-        # Sort by date globally, compute event distances
-        df_sorted = df[["ds", "is_event"]].drop_duplicates("ds").sort_values("ds")
-        event_dates = df_sorted.loc[df_sorted["is_event"] == 1, "ds"]
-
+        date_event = df.select("ds", "is_event").unique(subset=["ds"]).sort("ds").to_pandas()
+        event_dates = date_event.loc[date_event["is_event"] == 1, "ds"]
         if not event_dates.empty:
-            event_dates = event_dates.sort_values().reset_index(drop=True)
-
-            # Vectorized nearest-event search
-            ds_vals = df_sorted["ds"].to_numpy()
-            evt_vals = event_dates.to_numpy()
-
-            # next event
+            evt_vals = event_dates.sort_values().to_numpy()
+            ds_vals = date_event["ds"].to_numpy()
             next_idx = np.searchsorted(evt_vals, ds_vals, side="right")
             clipped_next_idx = np.clip(next_idx, 0, len(evt_vals) - 1)
-            next_evt = np.where(
-                next_idx < len(evt_vals),
-                evt_vals[clipped_next_idx],
-                np.datetime64("NaT"),
-            )
+            next_evt = np.where(next_idx < len(evt_vals), evt_vals[clipped_next_idx], np.datetime64("NaT"))
             days_next = np.where(
                 next_idx < len(evt_vals),
                 (next_evt - ds_vals).astype("timedelta64[D]").astype(np.int16),
-                np.int16(999),
+                np.int16(_NO_EVENT),
             )
-
-            # prev event
             prev_idx = np.searchsorted(evt_vals, ds_vals, side="left") - 1
             clipped_prev_idx = np.clip(prev_idx, 0, len(evt_vals) - 1)
-            prev_evt = np.where(
-                prev_idx >= 0,
-                evt_vals[clipped_prev_idx],
-                np.datetime64("NaT"),
-            )
+            prev_evt = np.where(prev_idx >= 0, evt_vals[clipped_prev_idx], np.datetime64("NaT"))
             days_prev = np.where(
                 prev_idx >= 0,
                 (ds_vals - prev_evt).astype("timedelta64[D]").astype(np.int16),
-                np.int16(999),
+                np.int16(_NO_EVENT),
             )
-
-            df_sorted["days_to_next_event"] = days_next
-            df_sorted["days_since_last_event"] = days_prev
-            df = df.merge(
-                df_sorted[["ds", "days_to_next_event", "days_since_last_event"]],
-                on="ds",
-                how="left",
+            dist_df = B.from_dict(
+                {
+                    "ds": ds_vals,
+                    "days_to_next_event": days_next,
+                    "days_since_last_event": days_prev,
+                }
             )
-
+            df = df.join(dist_df, on="ds", how="left")
     return df
 
 
-def add_price_stats(df: pd.DataFrame) -> pd.DataFrame:
+@_preserve_backend
+def add_price_stats(df):
     """Per-series historical price min / max / mean, and per-store daily rank."""
     if "sell_price" not in df.columns:
         return df
-
-    grp = df.groupby("unique_id", observed=True)["sell_price"]
-
-    if "price_mean" not in df.columns:
-        df["price_mean"] = grp.transform("mean").astype(np.float32)
-    if "price_min" not in df.columns:
-        df["price_min"] = grp.transform("min").astype(np.float32)
-    if "price_max" not in df.columns:
-        df["price_max"] = grp.transform("max").astype(np.float32)
-
-    # Price rank within store per day
+    sp = nw.col("sell_price")
+    df = df.with_columns(sp.mean().over("unique_id").cast(Float32).alias("price_mean"))
+    df = df.with_columns(sp.min().over("unique_id").cast(Float32).alias("price_min"))
+    df = df.with_columns(sp.max().over("unique_id").cast(Float32).alias("price_max"))
     if "store_id" in df.columns and "price_rank_in_store" not in df.columns:
-        df["price_rank_in_store"] = (
-            df.groupby(["store_id", "ds"], observed=True)["sell_price"]
-            .rank(method="average", pct=True)
-            .astype(np.float32)
+        df = df.with_columns(
+            sp.rank(method="average").over(["store_id", "ds"]).cast(Float32).alias("price_rank_in_store")
         )
-
     return df
 
 
-def add_release_features(df: pd.DataFrame) -> pd.DataFrame:
+@_preserve_backend
+def add_release_features(df):
     """Days since the first non-zero sale for each series."""
     if "y" not in df.columns or "days_since_release" in df.columns:
         return df
-
-    release = df[df["y"] > 0].groupby("unique_id", observed=True)["ds"].min().rename("release_date")
-    df = df.merge(release, on="unique_id", how="left")
-    days = (df["ds"] - df["release_date"]).dt.days
-    df["days_since_release"] = days.fillna(-1).astype(np.int16)
-    df = df.drop(columns=["release_date"])
-    return df
+    release = df.filter(nw.col("y") > 0).group_by("unique_id").agg(nw.col("ds").min().alias("release_date"))
+    df = df.join(release, on="unique_id", how="left")
+    duration_s = (nw.col("ds") - nw.col("release_date")).dt.total_seconds()
+    df = df.with_columns((duration_s / 86400).cast(Int16).fill_null(-1).alias("days_since_release"))
+    return df.drop(["release_date"])
 
 
-def build_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply the full minimal feature pipeline in place-friendly order."""
+# ── Pipeline ──────────────────────────────────────────────────────────
+
+
+def build_feature_frame(df):
+    """Apply the full minimal feature pipeline in place-friendly order.
+
+    Accepts and returns ``pd.DataFrame`` (or any backend-native DataFrame).
+    When the input is a pandas DataFrame, the output is also a pandas DataFrame
+    (required for Nixtla downstream compatibility).
+    """
+    is_pandas = isinstance(df, pd.DataFrame)
+    df = B.from_native(df) if not isinstance(df, nw.DataFrame) else df
     df = add_date_features(df)
     df = add_snap_flag(df)
     df = add_event_flag(df)
     df = add_price_features(df)
-    # Phase 2 expansions
     df = add_mean_encoding_features(df)
     df = add_calendar_features(df)
     df = add_price_stats(df)
     df = add_release_features(df)
-    return df
+    return B.to_pandas(df) if is_pandas else df
 
 
-def static_features(df: pd.DataFrame) -> pd.DataFrame:
-    """One row per series with category-level static features (ML-Forecast format)."""
+# ── Static features ───────────────────────────────────────────────────
+
+
+def static_features(df):
+    """One row per series with category-level static features (ML-Forecast format).
+
+    Accepts and returns ``pd.DataFrame`` (or any backend-native DataFrame).
+    """
+    is_pandas = isinstance(df, pd.DataFrame)
+    df = B.from_native(df) if not isinstance(df, nw.DataFrame) else df
     cols = ["unique_id", "item_id", "dept_id", "cat_id", "store_id", "state_id"]
     have = [c for c in cols if c in df.columns]
-    return df.drop_duplicates("unique_id")[have].reset_index(drop=True)
+    result = df.unique(subset=["unique_id"]).select(have)
+    return B.to_pandas(result) if is_pandas else result
