@@ -108,6 +108,12 @@ toto = [
     # here keeps the constraint explicit.
     "torch>=2.5",
 ]
+bayesian = [
+    # Probabilistic programming for notebooks/bayesian/ experiments.
+    # Not wired into the CLI — MCMC does not scale to 30k series locally.
+    "pymc>=5.16",
+    "arviz>=0.19",
+]
 
 # ----------------------------------------------------------------------
 # Tooling
