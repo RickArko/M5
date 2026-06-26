@@ -78,7 +78,6 @@ def add_snap_flag(df):
 
 
 @_preserve_backend
-@_preserve_backend
 def add_event_flag(df):
     """Single binary flag for ``any event today`` — drops sparse multi-hot encoding."""
     if "event_name_1" not in df.columns:

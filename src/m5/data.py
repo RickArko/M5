@@ -189,13 +189,6 @@ def _drop_leading_zeros_nw(df: nw.DataFrame) -> nw.DataFrame:
     return out
 
 
-def _drop_leading_zeros(df: pd.DataFrame) -> pd.DataFrame:
-    """Backward-compatible wrapper that works with pandas DataFrames."""
-    nw_df = B.from_native(df)
-    out = _drop_leading_zeros_nw(nw_df)
-    return B.to_pandas(out)
-
-
 def split_train_horizon(df: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Train/holdout split that mirrors the M5 evaluation window."""
     nw_df = B.from_native(df)

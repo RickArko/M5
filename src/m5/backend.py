@@ -61,7 +61,6 @@ Boolean = nw.Boolean
 String = nw.String
 Categorical = nw.Categorical
 Datetime = nw.Datetime
-Datetime = nw.Datetime
 Date = nw.Date
 
 # Map string dtype names (from config) to narwhals dtypes.

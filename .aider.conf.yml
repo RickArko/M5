@@ -5,12 +5,12 @@
 # Override per-session with `aider --no-conf` or extra `--read` flags.
 
 # Project context — read into every session as read-only reference.
-# AGENTS.md is the canonical agent contract; AI-CONTEXT.md is the
+# AGENTS.md is the canonical agent contract; .ai/AI-CONTEXT.md is the
 # token-optimized full repo summary; the developer/AGENTS.md guide
 # covers per-harness setup, workflow, and PR conventions.
 read:
   - AGENTS.md
-  - AI-CONTEXT.md
+  - .ai/AI-CONTEXT.md
   - docs/developer/AGENTS.md
 
 # Run the fast test tier after each edit (~5 s on toy fixtures).
