@@ -31,6 +31,26 @@ SEGMENT_KEYS = {
     "store_dept": ["store_id", "dept_id"],
 }
 
+DYNAMIC_CANDIDATES = [
+    "snap",
+    "is_event",
+    "price_norm",
+    "price_change_pct",
+    "days_to_next_event",
+    "days_since_last_event",
+    "week_of_month",
+    "price_mean",
+    "price_min",
+    "price_max",
+    "price_rank_in_store",
+    "days_since_release",
+    "cat_id_mean_dow",
+    "dept_id_mean_dow",
+    "store_id_mean_dow",
+    "state_id_mean_dow",
+    "store_cat_mean_dow",
+]
+
 
 def _segment_name(keys: list[str], values: tuple) -> str:
     return "_".join(str(v) for v in values)
@@ -110,26 +130,7 @@ def fit_predict_segmented(
     statics_present = [c for c in static_cols if c in df.columns]
 
     # Identify dynamic features that were built
-    dynamic_candidates = [
-        "snap",
-        "is_event",
-        "price_norm",
-        "price_change_pct",
-        "days_to_next_event",
-        "days_since_last_event",
-        "week_of_month",
-        "price_mean",
-        "price_min",
-        "price_max",
-        "price_rank_in_store",
-        "days_since_release",
-        "cat_id_mean_dow",
-        "dept_id_mean_dow",
-        "store_id_mean_dow",
-        "state_id_mean_dow",
-        "store_cat_mean_dow",
-    ]
-    dynamics_present = [c for c in dynamic_candidates if c in df.columns]
+    dynamics_present = [c for c in DYNAMIC_CANDIDATES if c in df.columns]
 
     keep_cols = ["unique_id", "ds", "y", *statics_present, *dynamics_present]
     df = encode_static_categoricals(df, statics_present)
@@ -199,26 +200,7 @@ def segmented_cv(
     statics_present = [c for c in static_cols if c in df.columns]
     df = encode_static_categoricals(df, statics_present)
 
-    dynamic_candidates = [
-        "snap",
-        "is_event",
-        "price_norm",
-        "price_change_pct",
-        "days_to_next_event",
-        "days_since_last_event",
-        "week_of_month",
-        "price_mean",
-        "price_min",
-        "price_max",
-        "price_rank_in_store",
-        "days_since_release",
-        "cat_id_mean_dow",
-        "dept_id_mean_dow",
-        "store_id_mean_dow",
-        "state_id_mean_dow",
-        "store_cat_mean_dow",
-    ]
-    dynamics_present = [c for c in dynamic_candidates if c in df.columns]
+    dynamics_present = [c for c in DYNAMIC_CANDIDATES if c in df.columns]
     keep_cols = ["unique_id", "ds", "y", *statics_present, *dynamics_present]
 
     logger.info(f"segmented_cv: segment_by={segment_keys} h={h} n_windows={n_windows} step={step_size or h}")

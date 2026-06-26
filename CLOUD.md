@@ -182,3 +182,266 @@ Best for ML/AI career signaling	GCP
 Best for enterprise / Microsoft roles	Azure
 For this specific project, AWS hits the sweet spot: the Terraform module is mature, the cost is still negligible ($0.21 per training run), and it is the most transferable skill to list on a resume. The repo even supports AWS S3 as the default artifact transport for Hetzner, so you could use Hetzner compute with an AWS S3 bucket if you want to split the difference.
 If you want me to generate the exact terraform.tfvars and make command for any of these providers, just tell me which one you are leaning toward.
+
+
+
+## Cloud Run
+
+1. Updated Terraform for Future Runs (ccx83)
+File: cloud/terraform/hetzner/terraform.tfvars
+Changed:
+train_server_type = "ccx83"  # 24 vCPU / 96 GB RAM (~â¬0.18/h)
+Next run will use:
+24 vCPU / 96 GB RAM (vs current 8 vCPU / 32 GB)
+~â¬0.18/hour (vs current ~â¬0.06/hour)
+3Ã faster for parallel workloads (LGBM, hier)
+2. Progress Monitoring
+Created:
+cloud-progress.md â live progress log
+scripts/monitor_cloud_progress.sh â automated checker
+Background monitor running:
+PID: 52293
+Checks every 10 minutes
+Updates cloud-progress.md automatically
+3. Current Status (06:15 UTC)
+â Prep complete â 46.8M rows
+ð CV Stats â running (41 min, 100% CPU)
+â³ CV LGBM â pending
+â³ CV Hier â pending
+â³ Score + Train â pending
+ETA: ~20-30 minutes remaining
+4. Automatic Shutdown
+Yes, the VM will auto-shutdown:
+cloud/cloud-init/train.sh has M5_TRAIN_SHUTDOWN_ON_DONE=true
+After artifacts are pushed to S3, VM powers off after 30 seconds
+No manual intervention needed
+5. Next Steps After Completion
+When the VM shuts down, I'll:
+Pull artifacts from S3:
+make cloud-pull-run PROVIDER=hetzner LOCAL_DIR=artifacts/cloud/latest
+Stage for Vue dashboard:
+cp artifacts/cloud/latest/artifacts/cv_*.parquet artifacts/
+cd frontend && npm run export:data
+Verify Vue app displays all models:
+cd frontend && npm run dev
+6. Monitor Log
+The monitor is checking every 10 minutes. You can view it:
+cat cloud-progress.md
+# or
+tail -f /tmp/cloud_monitor.log
+
+
+
+```bash
+make cloud-down PROVIDER=hetzner
+make cloud-train-up PROVIDER=hetzner \
+  TF_VARS="-var='last_n_days=-1' \
+           -var='n_series=-1' \
+           -var='cv_n_windows=3' \
+           -var='run_stats_cv=true' \
+           -var='run_lgbm_cv=true' \
+           -var='run_hier_cv=true' \
+           -var='score_models=stats lgbm hier' \
+           -var='run_train=true' \
+           -var='push_processed=true'"
+```
+
+
+# AWS
+
+```bash
+export PROVIDER=aws
+make cloud-init PROVIDER=aws
+make cloud-train-up PROVIDER=aws \
+  TF_VARS="-var='train_instance_type=r7i.4xlarge' \
+           -var='last_n_days=-1' \
+           -var='n_series=-1' \
+           -var='cv_n_windows=3' \
+           -var='run_stats_cv=true' \
+           -var='run_lgbm_cv=true' \
+           -var='run_hier_cv=true' \
+           -var='score_models=stats lgbm hier' \
+           -var='run_train=true' \
+           -var='push_processed=true'"
+```
+
+
+
+Solution Options
+Option 1: Run hierarchy on a larger cloud provider (Recommended)
+Hetzner's ccx33 (32 GB) is too small for full M5 scoring + hierarchy. Use AWS/GCP instead:
+# Switch to AWS with r7i.4xlarge (16 vCPU / 128 GB RAM) or r7i.8xlarge (32 vCPU / 256 GB)
+export PROVIDER=aws
+make cloud-init PROVIDER=aws
+make cloud-train-up PROVIDER=aws \
+  TF_VARS="-var='train_instance_type=r7i.4xlarge' \
+           -var='last_n_days=-1' \
+           -var='n_series=-1' \
+           -var='cv_n_windows=3' \
+           -var='run_stats_cv=true' \
+           -var='run_lgbm_cv=true' \
+           -var='run_hier_cv=true' \
+           -var='score_models=stats lgbm hier' \
+           -var='run_train=true' \
+           -var='push_processed=true'"
+AWS cost: ~$0.80/hour for r7i.4xlarge, ~$1.60/hour for r7i.8xlarge
+Option 2: Skip scoring on VM, run it locally
+Pull the CV artifacts and run scoring locally:
+# Pull CV artifacts from VM
+ssh root@167.233.83.66 "cat /srv/M5/artifacts/cv_*.parquet" > artifacts/
+
+# Or if VM is dead, use the S3 bucket
+make cloud-pull-run PROVIDER=hetzner LOCAL_DIR=artifacts/cloud/latest
+
+# Run scoring locally
+uv run m5 score --model stats --model lgbm
+Option 3: Destroy current VM and restart without scoring
+# Destroy OOM'd VM
+make cloud-down PROVIDER=hetzner
+
+# Recreate with scoring disabled
+make cloud-train-up PROVIDER=hetzner \
+  TF_VARS="-var='last_n_days=-1' \
+           -var='n_series=-1' \
+           -var='cv_n_windows=3' \
+           -var='run_stats_cv=true' \
+           -var='run_lgbm_cv=true' \
+           -var='run_hier_cv=false' \
+           -var='run_train=true' \
+           -var='push_processed=true'"
+Recommendation
+Option 1 (AWS) is best for full hierarchy with 128+ GB RAM. The Hetzner ccx33 is designed for small-medium workloads, not full M5.
+Which option do you want? If you want AWS, I need your AWS credentials. If you want Option 2/3, I can set it up now.
+
+
+
+Now run the AWS training:
+cd ~/Git/GitHub/M5
+export PROVIDER=aws
+
+# 1. Initialize AWS terraform
+make cloud-init PROVIDER=aws
+
+# 2. Launch training with full hierarchy
+make cloud-train-up PROVIDER=aws \
+  TF_VARS="-var='last_n_days=-1' \
+           -var='n_series=-1' \
+           -var='cv_n_windows=3' \
+           -var='run_stats_cv=true' \
+           -var='run_lgbm_cv=true' \
+           -var='run_hier_cv=true' \
+           -var='score_models=stats lgbm hier' \
+           -var='run_train=true' \
+           -var='push_processed=true'"
+This will:
+- Create r7i.4xlarge (128 GB RAM â enough for hierarchy)
+- Run stats + lgbm + hier CV
+- Score all models
+- Train final model
+- Push to s3://m5-artifacts-ricka-1781390300
+Cost: ~$0.80/hour Ã ~1.5 hours = ~$1.20
+Run the commands now?
+
+
+
+The hierarchy CV failed silently after running for ~7 minutes (from 02:00 to 02:07). The process died without writing cv_hier.parquet.
+Current Status:
+- â cv_stats.parquet (22.6 MB) â WRMSSE: AutoETS 0.863, Theta 0.869, SeasonalNaive 1.116
+- â cv_lgbm.parquet (23.5 MB) â WRMSSE: LGBM 0.833
+- â cv_hier.parquet â Process died, no file created
+- â³ Score + Train â Never ran (script stopped at hierarchy)
+The VM has been idle for ~12 hours (since 02:07).
+Options:
+Option 1: Run score + train with existing results (skip hierarchy)
+ssh ubuntu@54.84.106.100
+cd /srv/M5
+uv run m5 score --model stats --model lgbm
+uv run m5 train
+# Then push artifacts manually
+Option 2: Restart hierarchy CV
+ssh ubuntu@54.84.106.100
+cd /srv/M5
+uv run m5 cv hier --horizon 28 --n-windows 3
+Option 3: Pull current artifacts and continue locally
+# Pull from VM
+scp ubuntu@54.84.106.100:/srv/M5/artifacts/cv_*.parquet artifacts/
+
+# Run score locally
+uv run m5 score --model stats --model lgbm
+
+# Run hierarchy locally (if you have 64GB+ RAM)
+uv run m5 cv hier --horizon 28 --n-windows 3
+Recommendation
+Option 1 is fastest â score and train with the existing stats + lgbm results, then pull the complete artifacts. The hierarchy can be run separately later if needed.
+Want me to run the score + train on the VM now?
+
+
+Yes, you have been paying for it. AWS EC2 instances are billed for every hour they are running, regardless of whether they're actually doing work.
+Cost Summary
+Detail	Value
+Instance	r7i.4xlarge (16 vCPU / 128 GB RAM)
+Started	Jun 13, 22:43 UTC
+Current time	Jun 14, 14:08 UTC
+Duration	~15.5 hours
+Rate	~$0.80/hour
+Estimated cost	~$12.40
+What happened
+1. The VM ran stats CV (~1h40m)
+2. Ran LGBM CV (~37m)
+3. Hierarchy CV failed silently (process died ~12 hours ago)
+4. VM kept running â AWS doesn't auto-shutdown on failure
+Stop it now
+# Destroy the VM immediately
+cd ~/Git/GitHub/M5
+export PROVIDER=aws
+make cloud-down PROVIDER=aws
+Or directly:
+cd ~/Git/GitHub/M5/cloud/terraform/aws
+terraform destroy -auto-approve
+What to do
+1. Destroy the VM now (stop the billing)
+2. Pull the existing artifacts (stats + lgbm) â these are valuable
+3. Run hierarchy locally or on a smaller Hetzner instance
+4. Run score + train locally
+# 1. Destroy VM (stop billing)
+make cloud-down PROVIDER=aws
+
+# 2. Pull artifacts
+scp ubuntu@54.84.106.100:/srv/M5/artifacts/cv_stats.parquet artifacts/
+scp ubuntu@54.84.106.100:/srv/M5/artifacts/cv_lgbm.parquet artifacts/
+scp ubuntu@54.84.106.100:/srv/M5/data/processed/long.parquet data/processed/ 2>/dev/null || true
+
+# 3. Run hierarchy locally
+uv run m5 cv hier --horizon 28 --n-windows 3
+
+# 4. Score and train
+uv run m5 score --model stats --model lgbm --model hier
+uv run m5 train
+Destroy the VM now to stop the billing?
+
+
+
+The command is running â hierarchy CV takes 30-60 minutes and doesn't print much output initially.
+Problem: You're running it in the foreground. If you disconnect SSH, it will die.
+Fix â run it with nohup so it survives disconnection:
+# In the current terminal, press Ctrl+C to cancel the running command
+# Then run it properly with nohup:
+nohup uv run m5 cv hier --horizon 28 --n-windows 3 > /var/log/m5-hier.log 2>&1 &
+Or use tmux (better):
+# Install tmux if not present
+apt-get update && apt-get install -y tmux
+
+# Start a new session
+tmux new -s m5-hier
+
+# Run the command
+cd /srv/M5
+uv run m5 cv hier --horizon 28 --n-windows 3
+
+# Detach: press Ctrl+B then D
+# Reattach later: tmux attach -t m5-hier
+Check if it's running:
+ps aux | grep -E "hier|m5" | grep -v grep
+Check log:
+tail -f /var/log/m5-hier.log
+Want me to tell you how to set this up properly so you can disconnect and let it run?

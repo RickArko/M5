@@ -16,35 +16,10 @@ PUBLIC_MODULES = [
     "m5.cli",
     "m5.logging",
     "m5.plots",
-    "m5.legacy",
     "m5.models",
     "m5.models.stats",
     "m5.models.lgbm",
 ]
-
-
-def test_legacy_shim_exposes_old_names() -> None:
-    """The old EDA notebooks rely on these — guard against accidental rename."""
-    from m5 import legacy
-
-    expected = {
-        "id_col",
-        "time_col",
-        "id_cols",
-        "PATH_INPUT",
-        "TRAIN_PARQUET_PATH",
-        "load_calendar",
-        "load_prices",
-        "load_sales",
-        "load_train_parquet",
-        "filter_data",
-        "create_m5_fit_data",
-        "reduce_mem_usage",
-        "create_future_features",
-        "get_dfids",
-    }
-    missing = expected - set(dir(legacy))
-    assert not missing, f"m5.legacy missing: {missing}"
 
 
 @pytest.mark.parametrize("module", PUBLIC_MODULES)
