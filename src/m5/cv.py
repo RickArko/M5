@@ -14,6 +14,8 @@ Two entry points:
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pandas as pd
 
 from m5.config import SETTINGS, set_global_seed
@@ -262,3 +264,69 @@ def cv_from_recipe(
         return hier_cv(df, h=h_eff, n_windows=nw_eff, step_size=ss_eff, season_length=season)
 
     raise ValueError(f"cv_from_recipe: unsupported recipe.model.kind={recipe.model.kind!r}")
+
+
+def bayesian_cv(
+    df: pd.DataFrame,
+    *,
+    h: int = SETTINGS.horizon,
+    n_windows: int = SETTINGS.n_windows,
+    step_size: int | None = None,
+    n_series: int = 20,
+    series_ids: list[str] | None = None,
+    draws: int = 300,
+    tune: int = 300,
+    chains: int = 2,
+    quiet: bool = True,
+    likelihood: Literal["negbin", "zinb"] = "negbin",
+) -> pd.DataFrame:
+    """Rolling-origin CV with the Bayesian count GLM (optional ``bayesian`` group)."""
+    from m5.models.bayesian import bayesian_cv as _bayesian_cv
+
+    return _bayesian_cv(
+        df,
+        h=h,
+        n_windows=n_windows,
+        step_size=step_size,
+        n_series=n_series,
+        series_ids=series_ids,
+        draws=draws,
+        tune=tune,
+        chains=chains,
+        quiet=quiet,
+        likelihood=likelihood,
+    )
+
+
+def bayesian_routed_cv(
+    df: pd.DataFrame,
+    *,
+    h: int = SETTINGS.horizon,
+    n_windows: int = SETTINGS.n_windows,
+    step_size: int | None = None,
+    n_series: int = 20,
+    series_ids: list[str] | None = None,
+    pool_col: str = "dept_id",
+    min_hier_series: int = 2,
+    draws: int = 300,
+    tune: int = 300,
+    chains: int = 2,
+    quiet: bool = True,
+) -> pd.DataFrame:
+    """ADI/CV²-routed Bayesian CV (optional ``bayesian`` group)."""
+    from m5.models.bayesian import bayesian_routed_cv as _bayesian_routed_cv
+
+    return _bayesian_routed_cv(
+        df,
+        h=h,
+        n_windows=n_windows,
+        step_size=step_size,
+        n_series=n_series,
+        series_ids=series_ids,
+        pool_col=pool_col,
+        min_hier_series=min_hier_series,
+        draws=draws,
+        tune=tune,
+        chains=chains,
+        quiet=quiet,
+    )

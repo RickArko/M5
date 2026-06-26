@@ -81,11 +81,11 @@ def compute_components(
     ).set_index(id_col)["weight"]
 
     # --- Scales: Naive-1 in-sample MSE ---
-    # Diff y within each group → squared → mean.
+    # Diff y within each group → squared → mean (pre-square so group_by is a simple mean).
     df_no_rev = df.drop(["_rev"])
     diffs = df_no_rev.with_columns(nw.col(target_col).diff().over(id_col).alias("_diff"))
-    # Mean squared diff per series.
-    scales_nw = diffs.group_by(id_col).agg(((nw.col("_diff") ** 2).mean()).alias("scale"))
+    diffs = diffs.with_columns((nw.col("_diff") ** 2).alias("_diff_sq"))
+    scales_nw = diffs.group_by(id_col).agg(nw.col("_diff_sq").mean().alias("scale"))
     scales_nw = scales_nw.filter(nw.col("scale").is_null() | (nw.col("scale") != 0.0))
     scales = to_pandas(scales_nw.select(id_col, "scale")).set_index(id_col)["scale"]
 
@@ -157,6 +157,50 @@ def wrmsse_for_models(
         for m in model_cols
     }
     return pd.Series(scores, name="wrmsse").sort_values()
+
+
+def accuracy_for_models(
+    truth: pd.DataFrame,
+    forecasts: pd.DataFrame,
+    *,
+    model_cols: list[str] | None = None,
+    id_col: str = "unique_id",
+    time_col: str = "ds",
+    target_col: str = "y",
+) -> pd.DataFrame:
+    """Per-model MAE, RMSE, sMAPE, and signed bias on the bottom level."""
+    if model_cols is None:
+        excluded = {id_col, time_col, target_col, "cutoff"}
+        model_cols = [c for c in forecasts.columns if c not in excluded]
+
+    merged = truth[[id_col, time_col, target_col]].merge(
+        forecasts[[id_col, time_col, *model_cols]],
+        on=[id_col, time_col],
+        how="inner",
+    )
+    if merged.empty:
+        raise ValueError("No overlapping rows between truth and forecasts.")
+
+    rows: list[dict[str, float | str]] = []
+    denom = merged[target_col].abs().mean()
+    for model in model_cols:
+        err = merged[model] - merged[target_col]
+        rows.append(
+            {
+                "model": model,
+                "MAE": float(np.abs(err).mean()),
+                "RMSE": float(np.sqrt((err**2).mean())),
+                "sMAPE": float(
+                    (
+                        2 * np.abs(err) / (merged[target_col].abs() + merged[model].abs()).clip(lower=1e-8)
+                    ).mean()
+                ),
+                "bias": float(err.mean()),
+                "bias_pct_of_mean_y": float(err.mean() / denom) if denom else 0.0,
+                "n_obs": float(len(merged)),
+            }
+        )
+    return pd.DataFrame(rows).set_index("model").sort_values("MAE")
 
 
 def make_submission(
