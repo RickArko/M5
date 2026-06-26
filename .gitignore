@@ -62,3 +62,4 @@ loadtest/payloads/*
 .DS_Store
 Thumbs.db
 docs/plans/*
+.ai/
