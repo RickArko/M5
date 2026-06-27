@@ -9,13 +9,13 @@ If you only read three things first, read them in this order:
 
 1. [`AGENTS.md`](../../AGENTS.md) at the repo root — the short cross-tool
    agent contract (rules, commands, hard limits).
-2. [`AI-CONTEXT.md`](../../AI-CONTEXT.md) — token-optimized full repo
+2. [`.ai/AI-CONTEXT.md`](../../.ai/AI-CONTEXT.md) — token-optimized full repo
    summary. Single best file to drop into an agent's system prompt.
 3. This file — extensive contributor guide for agents.
 
-[`CLAUDE.md`](../../CLAUDE.md) is loaded automatically by Claude Code and
-overlaps `AGENTS.md`; you don't need to read both unless you're editing
-them.
+[`.ai/.claude/CLAUDE.md`](../../.ai/.claude/CLAUDE.md) is loaded
+automatically by Claude Code and overlaps `AGENTS.md`; you don't need to
+read both unless you're editing them.
 
 ---
 
@@ -50,16 +50,16 @@ experiment before adding a column.
 6. `WriteUp.md` — methodology + EDA highlights, only if working on
    forecasting models or evaluation.
 
-`CLAUDE.md` overlaps `AGENTS.md` and is auto-loaded by Claude Code; read
-only if editing it.
+`.ai/.claude/CLAUDE.md` overlaps `AGENTS.md` and is auto-loaded by Claude
+Code; read only if editing it.
 
 ---
 
 ## Hard rules (don't violate)
 
-These are in [`CLAUDE.md`](../../CLAUDE.md) and the root
-[`AGENTS.md`](../../AGENTS.md) too. Repeated here so an agent reading
-just this file isn't surprised.
+These are in [`.ai/.claude/CLAUDE.md`](../../.ai/.claude/CLAUDE.md) and
+the root [`AGENTS.md`](../../AGENTS.md) too. Repeated here so an agent
+reading just this file isn't surprised.
 
 1. **Reproducibility is a contract.** Every CV / forecast / train entry
    point calls `set_global_seed()` before fitting. LightGBM uses
@@ -232,7 +232,7 @@ documented here.
 
 **Status:** Already configured.
 
-- `CLAUDE.md` is auto-loaded by every Claude Code session in this repo.
+- `.ai/.claude/CLAUDE.md` is auto-loaded by every Claude Code session in this repo.
 - `.claude/settings.local.json` already permits `Bash(uv run *)`,
   `Bash(uv sync *)`, and a handful of git status reads.
 - Useful skills enabled at the user level (`~/.claude/skills/`):
@@ -285,7 +285,7 @@ Useful flags:
 
 ### Gemini CLI (Google)
 
-**Status:** Works out of the box once `GEMINI.md` is committed.
+**Status:** Works.
 
 ```bash
 # Install (Node 20+)
@@ -298,9 +298,9 @@ gemini auth login
 gemini
 ```
 
-`GEMINI.md` at the root is a thin pointer to `AGENTS.md` and
-`AI-CONTEXT.md`. Gemini CLI supports `@path/to/file` inclusion at the
-prompt — handy for surgical context loads:
+The project's `.ai/.gemini/GEMINI.md` is a thin pointer to `AGENTS.md`
+and `AI-CONTEXT.md`. Gemini CLI supports `@path/to/file` inclusion at
+the prompt — handy for surgical context loads:
 
 ```
 > @AI-CONTEXT.md @src/m5/cv.py what does lgbm_cv guarantee about determinism?
@@ -416,8 +416,8 @@ print(wrmsse_for_models(truth, cv, comps))
 
 ### When extending features (one of the most common asks)
 
-`CLAUDE.md` already lists the touch points; the agent must update
-**all** of them or the feature won't reach the model:
+`.ai/.claude/CLAUDE.md` already lists the touch points; the agent must
+update **all** of them or the feature won't reach the model:
 
 1. `src/m5/features.py` — add the function.
 2. `build_feature_frame` — chain it in.
@@ -431,7 +431,7 @@ training time.
 
 ### When adding a model
 
-`CLAUDE.md` covers this:
+`.ai/.claude/CLAUDE.md` covers this:
 
 1. `src/m5/models/<x>.py` — `build_<x>_forecaster` + `fit_predict_<x>`,
    mirroring `stats.py` / `lgbm.py`.
@@ -515,7 +515,7 @@ explicitly wants GPU.
 | `command not found: uv` after bootstrap | Shell hasn't reloaded | `source ~/.local/bin/env` or new terminal |
 | `AI-CONTEXT.md` and source disagree | File was hand-edited | Re-run `/ai-condense` to regenerate |
 
-Full troubleshooting matrix: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
+Full troubleshooting guide: [`GUIDE.md`](GUIDE.md#common-fixes).
 
 ---
 
@@ -529,7 +529,7 @@ Full troubleshooting matrix: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 | `.pre-commit-config.yaml` | Mirrors CI; loosening it desynchronizes them |
 | `.github/workflows/*` | CI definition |
 | `WriteUp.md` | Canonical methodology — touched in dedicated docs PRs only |
-| `CLAUDE.md` / `AGENTS.md` / this file | Conventions; touched in dedicated docs PRs |
+| `AGENTS.md` / this file | Conventions; touched in dedicated docs PRs |
 | `cloud/terraform/*` | Infra; needs review for cost / blast radius |
 
 When in doubt, the agent should ask before editing any of the above.
@@ -558,12 +558,10 @@ When in doubt, the agent should ask before editing any of the above.
 ## See also
 
 - [`AGENTS.md`](../../AGENTS.md) — root cross-tool agent contract.
-- [`CLAUDE.md`](../../CLAUDE.md) — Claude Code's auto-loaded conventions.
-- [`AI-CONTEXT.md`](../../AI-CONTEXT.md) — token-condensed full repo context.
+- [`.ai/.claude/CLAUDE.md`](../../.ai/.claude/CLAUDE.md) — Claude Code conventions.
+- [`.ai/AI-CONTEXT.md`](../../.ai/AI-CONTEXT.md) — token-condensed full repo context.
 - [`README.md`](../../README.md) — happy path.
-- [`docs/developer/SETUP.md`](SETUP.md) — first-time install.
-- [`docs/developer/DEVELOPMENT.md`](DEVELOPMENT.md) — daily workflow.
+- [`docs/developer/GUIDE.md`](GUIDE.md) — setup, workflow, debugging, common fixes.
 - [`docs/developer/ARCHITECTURE.md`](ARCHITECTURE.md) — module map + data flow.
-- [`docs/developer/TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — error matrix.
 - [`WriteUp.md`](../../WriteUp.md) — methodology.
 - [agents.md spec](https://agents.md) — the cross-tool convention this repo follows.

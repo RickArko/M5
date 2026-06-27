@@ -25,6 +25,7 @@ MANIFEST
 htmlcov/
 coverage.xml
 .cache/
+.pytensor/
 node_modules/
 frontend/.vite/deps/*
 
@@ -61,3 +62,4 @@ loadtest/payloads/*
 .DS_Store
 Thumbs.db
 docs/plans/*
+.ai/

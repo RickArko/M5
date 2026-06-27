@@ -9,17 +9,22 @@ Schema convention (Nixtla):
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from m5.backend import B, nw, to_pandas
 from m5.config import SETTINGS
 from m5.logging import logger
 
 ID_COLS = ["unique_id", "item_id", "dept_id", "cat_id", "store_id", "state_id"]
 EVENT_COLS = ["event_name_1", "event_type_1", "event_name_2", "event_type_2"]
+
+# Sale column range for melt.
+_SALE_COL_PATTERN = "d_"
 
 
 def _calendar_dtypes() -> dict[str, Any]:
@@ -36,10 +41,11 @@ def _calendar_dtypes() -> dict[str, Any]:
 
 
 def load_calendar(raw_dir: Path) -> pd.DataFrame:
+    """Load M5 calendar CSV with typed dtypes. Returns pandas DataFrame."""
     dtypes = _calendar_dtypes()
     cal = pd.read_csv(
         raw_dir / "calendar.csv",
-        dtype=dtypes,  # type: ignore[arg-type]  # pandas-stubs disallows numpy dtype objects
+        dtype=dtypes,  # type: ignore[arg-type]
         usecols=[*dtypes.keys(), "date"],
         parse_dates=["date"],
     )
@@ -50,6 +56,7 @@ def load_calendar(raw_dir: Path) -> pd.DataFrame:
 
 
 def load_prices(raw_dir: Path) -> pd.DataFrame:
+    """Load M5 sell_prices CSV with typed dtypes. Returns pandas DataFrame."""
     return pd.read_csv(
         raw_dir / "sell_prices.csv",
         dtype={
@@ -62,7 +69,11 @@ def load_prices(raw_dir: Path) -> pd.DataFrame:
 
 
 def load_sales(raw_dir: Path, prices: pd.DataFrame, n_days: int = 1941) -> pd.DataFrame:
-    """Load wide sales (one column per d_*) using the *evaluation* split."""
+    """Load wide sales (one column per d_*) using the *evaluation* split.
+
+    Returns pandas DataFrame for backward compatibility with callers
+    that expect pandas-specific dtypes (categorical, etc.).
+    """
     dtypes: dict[str, Any] = {
         "id": "category",
         "item_id": prices["item_id"].dtype,
@@ -82,38 +93,22 @@ def load_sales(raw_dir: Path, prices: pd.DataFrame, n_days: int = 1941) -> pd.Da
     return sales
 
 
-def _shrink_int(series: pd.Series) -> pd.Series:
-    cmin, cmax = series.min(), series.max()
-    for t in (np.int8, np.int16, np.int32, np.int64):
-        if cmin >= np.iinfo(t).min and cmax <= np.iinfo(t).max:
-            return series.astype(t)
-    return series
-
-
-def _shrink_float(series: pd.Series) -> pd.Series:
-    cmin, cmax = series.min(), series.max()
-    for t in (np.float32, np.float64):
-        if cmin >= np.finfo(t).min and cmax <= np.finfo(t).max:
-            return series.astype(t)
-    return series
-
-
 def reduce_mem_usage(df: pd.DataFrame, *, verbose: bool = True) -> pd.DataFrame:
-    """Down-cast numeric columns to the smallest dtype that fits."""
-    start = df.memory_usage(deep=True).sum() / 1024**2
+    """Down-cast numeric columns to the smallest dtype that fits.
 
-    for col in df.columns:
-        kind = df[col].dtype.kind
-        if kind == "i":
-            df[col] = _shrink_int(df[col])
-        elif kind == "f":
-            df[col] = _shrink_float(df[col])
-    end = df.memory_usage(deep=True).sum() / 1024**2
-    if verbose:
-        logger.info(
-            f"reduce_mem_usage: {start:,.1f} MB → {end:,.1f} MB ({100 * (start - end) / start:.1f}% drop)"
-        )
-    return df
+    Accepts and returns a pandas DataFrame (backward-compatible wrapper
+    around :func:`m5.backend.shrink_dtypes`).
+    """
+    nw_df = B.from_native(df)
+    nw_df = shrink_dtypes(nw_df, verbose=verbose)
+    return B.to_pandas(nw_df)
+
+
+def shrink_dtypes(df: nw.DataFrame, *, verbose: bool = True) -> nw.DataFrame:
+    """Down-cast numeric columns — backend-agnostic."""
+    from m5.backend import shrink_dtypes as _shrink
+
+    return _shrink(df, verbose=verbose)
 
 
 def build_long_frame(
@@ -124,45 +119,81 @@ def build_long_frame(
     last_n_days: int | None = None,
     n_series: int | None = None,
 ) -> pd.DataFrame:
-    """Melt wide sales → Nixtla long frame, attach calendar + price features.
+    """Melt wide sales \u2192 Nixtla long frame, attach calendar + price features.
 
-    Returns columns: ``unique_id, ds, y`` + static and time-varying covariates.
+    Returns a pandas DataFrame (for Nixtla downstream compatibility).
+    Uses the narwhals backend internally for all processing.
     """
+    # Subsample series if requested.
     if n_series is not None and n_series > 0:
-        kept = sales["unique_id"].drop_duplicates().sample(n=n_series, random_state=SETTINGS.seed)
-        sales = sales[sales["unique_id"].isin(kept)]
+        unique_ids = pd.Series(sales["unique_id"].unique())
+        kept = unique_ids.sample(n=n_series, random_state=SETTINGS.seed)
+        sales = sales[sales["unique_id"].isin(kept)].copy()
         logger.info(f"Subsampled to {n_series:,d} series for fast iteration.")
 
+    # Convert inputs to narwhals for processing.
+    sales_nw = B.from_native(sales)
+    cal_nw = B.from_native(cal)
+    prices_nw = B.from_native(prices)
+
     id_vars = ["unique_id", "item_id", "dept_id", "cat_id", "store_id", "state_id"]
-    long = sales.melt(id_vars=id_vars, var_name="d", value_name="y")
 
-    long["d"] = long["d"].astype(cal["d"].dtype)
-    long = long.merge(cal, on="d", how="left")
-    long = long.merge(prices, on=["store_id", "item_id", "wm_yr_wk"], how="left")
-    long = long.rename(columns={"date": "ds"})
-    long = long.sort_values(["unique_id", "ds"]).reset_index(drop=True)
+    # Identify sale columns (d_1 .. d_N) — everything not in id_vars.
+    all_cols = sales_nw.columns
+    sale_cols = [c for c in all_cols if c not in {*id_vars, "id"}]
 
-    long = _drop_leading_zeros(long)
+    # Melt: wide → long.
+    long = sales_nw.unpivot(
+        index=id_vars,
+        on=sale_cols,
+        variable_name="d",
+        value_name="y",
+    )
+
+    # Cast d column to match calendar's dtype.
+    cal_d_dtype = cal_nw.schema["d"]
+    long = long.with_columns(nw.col("d").cast(cal_d_dtype))
+
+    # Attach calendar and prices.
+    long = long.join(cal_nw, on="d", how="left")
+    long = long.join(prices_nw, on=["store_id", "item_id", "wm_yr_wk"], how="left")
+
+    # Rename date → ds, sort.
+    long = long.rename({"date": "ds"})
+    long = long.sort(["unique_id", "ds"])
+
+    # Drop leading zeros.
+    long = _drop_leading_zeros_nw(long)
+
+    # Optional trailing-window trim.
     if last_n_days is not None and last_n_days > 0:
-        cutoff = long["ds"].max() - pd.Timedelta(days=int(last_n_days))
-        long = long[long["ds"] >= cutoff].reset_index(drop=True)
-        logger.info(f"Kept last {last_n_days:,d} days → {len(long):,d} rows.")
+        max_ds = long.select(nw.col("ds").max()).item()
+        cutoff = max_ds - timedelta(days=int(last_n_days))
+        long = long.filter(nw.col("ds") >= cutoff)
+        logger.info(f"Kept last {last_n_days:,d} days \u2192 {len(long):,d} rows.")
 
-    long["y"] = long["y"].astype(np.float32)
-    return long
+    # Cast y to float32.
+    long = long.with_columns(nw.col("y").cast(nw.Float32))
+
+    # Convert back to pandas for Nixtla downstream compatibility.
+    return to_pandas(long)
 
 
-def _drop_leading_zeros(df: pd.DataFrame) -> pd.DataFrame:
-    """Remove leading zero observations within each series (item not yet stocked)."""
-    has_started = df.groupby("unique_id", observed=True)["y"].transform(lambda s: s.gt(0).cummax())
-    out = df[has_started.astype(bool)].reset_index(drop=True)
-    logger.debug(f"Dropped {len(df) - len(out):,d} leading-zero rows.")
+def _drop_leading_zeros_nw(df: nw.DataFrame) -> nw.DataFrame:
+    """Remove leading-zero observations — backend-agnostic version."""
+    n_before = df.select(nw.len()).item()
+    started = (nw.col("y") > 0).cum_max().over("unique_id")
+    out = df.filter(started)
+    n_after = out.select(nw.len()).item()
+    logger.debug(f"Dropped {n_before - n_after:,d} leading-zero rows.")
     return out
 
 
 def split_train_horizon(df: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Train/holdout split that mirrors the M5 evaluation window."""
-    cutoff = df["ds"].max() - pd.Timedelta(days=horizon)
-    train = df[df["ds"] <= cutoff].copy()
-    holdout = df[df["ds"] > cutoff].copy()
-    return train, holdout
+    nw_df = B.from_native(df)
+    max_ds = nw_df.select(nw.col("ds").max()).item()
+    cutoff = max_ds - timedelta(days=horizon)
+    train = nw_df.filter(nw.col("ds") <= cutoff)
+    holdout = nw_df.filter(nw.col("ds") > cutoff)
+    return B.to_pandas(train), B.to_pandas(holdout)

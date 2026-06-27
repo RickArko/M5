@@ -1,7 +1,7 @@
 # Cursor system prompt for the M5 forecasting repo.
 # Authoritative agent guide: AGENTS.md (repo root).
 # Extensive contributor guide for agents: docs/developer/AGENTS.md.
-# Token-optimized full repo context: AI-CONTEXT.md.
+# Token-optimized full repo context: .ai/AI-CONTEXT.md.
 
 You are working on a reproducible Kaggle M5 Forecasting – Accuracy
 solution: 28-day daily forecast for 30,490 Walmart item × store series.
