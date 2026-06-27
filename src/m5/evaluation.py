@@ -75,7 +75,7 @@ def compute_components(
 
     # Sum revenue per series for the trailing 28 days.
     rev_sum = last_28.group_by(id_col).agg(nw.col("_rev").sum().alias("_rev_sum"))
-    total_rev = rev_sum.select(nw.col("_rev_sum").sum()).item()
+    total_rev = rev_sum.select(nw.col("_rev_sum").sum()).item()  # type: ignore[union-attr]
     weights = to_pandas(
         rev_sum.with_columns((nw.col("_rev_sum") / total_rev).alias("weight")).select(id_col, "weight")
     ).set_index(id_col)["weight"]
@@ -107,6 +107,8 @@ def wrmsse(
     """Score a single forecast column against ground truth."""
     truth_nw = from_native(truth)
     forecast_nw = from_native(forecast)
+    assert isinstance(truth_nw, nw.DataFrame)
+    assert isinstance(forecast_nw, nw.DataFrame)
 
     merged = truth_nw.select(id_col, time_col, target_col).join(
         forecast_nw.select(id_col, time_col, forecast_col),
@@ -232,7 +234,7 @@ def make_submission(
             raise ValueError(f"value_col not given and could not be inferred; candidates: {candidates}")
         value_col = candidates[0]
 
-    wide_nw = preds_nw.pivot(  # noqa: PD010  — narwhals API, not pandas
+    wide_nw = preds_nw.pivot(  # type: ignore[union-attr]  # noqa: PD010  — narwhals API, not pandas
         values=value_col,
         index=id_col,
         on=time_col,

@@ -64,7 +64,7 @@ Datetime = nw.Datetime
 Date = nw.Date
 
 # Map string dtype names (from config) to narwhals dtypes.
-DTYPE_MAP: dict[str, nw.dtypes.DType] = {
+DTYPE_MAP: dict[str, type[nw.dtypes.DType]] = {
     "int8": Int8,
     "int16": Int16,
     "int32": Int32,
@@ -132,15 +132,15 @@ class Backend:
 
     def read_parquet(self, path: str | Path, **kwargs: Any) -> nw.DataFrame | nw.LazyFrame:
         """Read a parquet file using the configured backend."""
-        return nw.read_parquet(str(path), backend=self._nw_backend, **kwargs)
+        return nw.read_parquet(str(path), backend=self._nw_backend, **kwargs)  # type: ignore[arg-type]
 
     def write_parquet(self, df: nw.DataFrame | nw.LazyFrame, path: str | Path, **kwargs: Any) -> None:
         """Write a narwhals DataFrame to parquet."""
-        df.write_parquet(str(path), **kwargs)
+        df.write_parquet(str(path), **kwargs)  # type: ignore[union-attr]
 
     def read_csv(self, path: str | Path, **kwargs: Any) -> nw.DataFrame | nw.LazyFrame:
         """Read a CSV file using the configured backend."""
-        return nw.read_csv(str(path), backend=self._nw_backend, **kwargs)
+        return nw.read_csv(str(path), backend=self._nw_backend, **kwargs)  # type: ignore[arg-type]
 
     # ── Conversion ────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ class Backend:
         Note: when values are plain Python lists, the ``backend`` kwarg
         is required (narwhals >= 2.20).  We pass it automatically.
         """
-        return nw.from_dict(data, schema=schema, backend=self._nw_backend)
+        return nw.from_dict(data, schema=schema, backend=self._nw_backend)  # type: ignore[arg-type]
 
     # ── Utilities ─────────────────────────────────────────────────
 
@@ -174,7 +174,7 @@ class Backend:
         how: str = "vertical",
     ) -> nw.DataFrame | nw.LazyFrame:
         """Concatenate narwhals DataFrames."""
-        return nw.concat(items, how=how)
+        return nw.concat(items, how=how)  # type: ignore[type-var, arg-type]
 
     def collect(self, df: nw.LazyFrame) -> nw.DataFrame:
         """Materialize a LazyFrame into an eager DataFrame."""
@@ -434,7 +434,7 @@ def _fits_in_dtype(cmin: float, cmax: float, dtype: nw.dtypes.DType) -> bool:
     elif dtype is UInt8:  lo, hi = 0, int(np.iinfo(np.uint8).max)                                # noqa: E701
     elif dtype is UInt16: lo, hi = 0, int(np.iinfo(np.uint16).max)                               # noqa: E701
     elif dtype is UInt32: lo, hi = 0, int(np.iinfo(np.uint32).max)                               # noqa: E701
-    elif dtype is Float32: lo, hi = float(np.finfo(np.float32).min), float(np.finfo(np.float32).max)  # noqa: E701
+    elif dtype is Float32: lo, hi = float(np.finfo(np.float32).min), float(np.finfo(np.float32).max)  # type: ignore[assignment]  # noqa: E701
     else:                 return False                                                          # noqa: E701
     # fmt: on
     return bool(cmin >= lo and cmax <= hi)

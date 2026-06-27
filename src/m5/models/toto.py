@@ -89,7 +89,7 @@ def _forecast_batch(
     target_mask = torch.ones_like(batch_tensor, dtype=torch.bool)
     series_ids = torch.zeros(batch_size, 1, dtype=torch.long, device=batch_tensor.device)
 
-    quantiles = model.forecast(
+    quantiles = model.forecast(  # type: ignore[operator]
         {"target": batch_tensor, "target_mask": target_mask, "series_ids": series_ids},
         horizon=horizon,
         decode_block_size=decode_block_size,

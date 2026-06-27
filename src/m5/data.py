@@ -100,7 +100,7 @@ def reduce_mem_usage(df: pd.DataFrame, *, verbose: bool = True) -> pd.DataFrame:
     around :func:`m5.backend.shrink_dtypes`).
     """
     nw_df = B.from_native(df)
-    nw_df = shrink_dtypes(nw_df, verbose=verbose)
+    nw_df = shrink_dtypes(nw_df, verbose=verbose)  # type: ignore[arg-type]
     return B.to_pandas(nw_df)
 
 
@@ -155,15 +155,15 @@ def build_long_frame(
     long = long.with_columns(nw.col("d").cast(cal_d_dtype))
 
     # Attach calendar and prices.
-    long = long.join(cal_nw, on="d", how="left")
-    long = long.join(prices_nw, on=["store_id", "item_id", "wm_yr_wk"], how="left")
+    long = long.join(cal_nw, on="d", how="left")  # type: ignore[arg-type]
+    long = long.join(prices_nw, on=["store_id", "item_id", "wm_yr_wk"], how="left")  # type: ignore[arg-type]
 
     # Rename date → ds, sort.
     long = long.rename({"date": "ds"})
     long = long.sort(["unique_id", "ds"])
 
     # Drop leading zeros.
-    long = _drop_leading_zeros_nw(long)
+    long = _drop_leading_zeros_nw(long)  # type: ignore[arg-type]
 
     # Optional trailing-window trim.
     if last_n_days is not None and last_n_days > 0:
@@ -192,6 +192,7 @@ def _drop_leading_zeros_nw(df: nw.DataFrame) -> nw.DataFrame:
 def split_train_horizon(df: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Train/holdout split that mirrors the M5 evaluation window."""
     nw_df = B.from_native(df)
+    assert isinstance(nw_df, nw.DataFrame), "expected eager DataFrame"
     max_ds = nw_df.select(nw.col("ds").max()).item()
     cutoff = max_ds - timedelta(days=horizon)
     train = nw_df.filter(nw.col("ds") <= cutoff)
