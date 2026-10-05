@@ -33,7 +33,7 @@ dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
     # --- Plotting (light) -------------------------------------------
-    "matplotlib>=3.9",
+    "matplotlib>=3.11.2",
     "seaborn>=0.13",
     # --- Model persistence ------------------------------------------
     # joblib is already pulled transitively via scikit-learn; making it
