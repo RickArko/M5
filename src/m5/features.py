@@ -210,7 +210,9 @@ def add_release_features(df):
     release = df.filter(nw.col("y") > 0).group_by("unique_id").agg(nw.col("ds").min().alias("release_date"))
     df = df.join(release, on="unique_id", how="left")
     duration_s = (nw.col("ds") - nw.col("release_date")).dt.total_seconds()
-    df = df.with_columns((duration_s / 86400).cast(Int16).fill_null(-1).alias("days_since_release"))
+    # Fill before cast: all-zero series have no release_date → NaN days, and
+    # pandas refuses to cast non-finite floats to Int16 (IntCastingNaNError).
+    df = df.with_columns((duration_s / 86400).fill_null(-1).cast(Int16).alias("days_since_release"))
     return df.drop(["release_date"])
 
 

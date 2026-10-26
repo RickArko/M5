@@ -59,6 +59,21 @@ def test_build_feature_frame_idempotent_columns(toy_long: pd.DataFrame) -> None:
     assert expected.issubset(out.columns)
 
 
+def test_build_feature_frame_handles_all_zero_series(toy_long: pd.DataFrame) -> None:
+    """Series with no positive sales have no release date — must not IntCastingNaNError."""
+    df = toy_long.copy()
+    df["snap_CA"] = 0
+    df["snap_TX"] = 0
+    df["snap_WI"] = 0
+    df["event_name_1"] = "none"
+    zero_id = df["unique_id"].iloc[0]
+    df.loc[df["unique_id"] == zero_id, "y"] = 0.0
+
+    out = build_feature_frame(df)
+    assert "days_since_release" in out.columns
+    assert (out.loc[out["unique_id"] == zero_id, "days_since_release"] == -1).all()
+
+
 def test_build_feature_frame_event_distances_with_polars_backend(
     toy_long: pd.DataFrame, monkeypatch: pytest.MonkeyPatch
 ) -> None:
