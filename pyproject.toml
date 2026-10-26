@@ -88,7 +88,7 @@ serve = [
     # We pin `fastapi[standard]` so the test suite can use `fastapi.testclient.TestClient`
     # (depends on httpx) without an extra dev dep.
     "fastapi[standard]>=0.115",
-    "uvicorn[standard]>=0.32",
+    "uvicorn[standard]>=0.54.0",
     "pydantic-settings>=2.6",
     "prometheus-client>=0.21",
 ]
