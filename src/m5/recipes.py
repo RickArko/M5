@@ -168,7 +168,7 @@ def build_lgbm_from_recipe(
     recipe: Recipe,
     *,
     seed: int | None = None,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> Any:
     """Build an MLForecast (LightGBM) from a recipe.
 
@@ -176,6 +176,8 @@ def build_lgbm_from_recipe(
     ``configs/m5/lgbm.yaml`` is loaded. Seed is injected from
     :data:`SETTINGS.seed` so ``M5_SEED`` env override still works; pass
     ``seed=...`` to override per-call.
+
+    ``n_jobs`` defaults to 1 (see :func:`m5.models.lgbm.build_lgbm_forecaster`).
     """
     if not isinstance(recipe.model, LGBMRecipe):
         raise TypeError(f"build_lgbm_from_recipe: recipe.model.kind={recipe.model.kind!r}, expected 'lgbm'")

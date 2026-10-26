@@ -13,7 +13,8 @@
 UV       ?= uv
 VENV     ?= .venv
 HORIZON  ?= 28
-WINDOWS  ?= 3
+# Prefer WINDOWS= on the CLI; else honor M5_N_WINDOWS (same knob as .env / SETTINGS).
+WINDOWS  ?= $(or $(M5_N_WINDOWS),3)
 MODEL    ?= stats
 MODELS   ?= stats lgbm
 REPORT   ?= reports
