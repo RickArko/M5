@@ -170,12 +170,17 @@ def add_calendar_features(df):
                 (ds_vals - prev_evt).astype("timedelta64[D]").astype(np.int16),
                 np.int16(_NO_EVENT),
             )
-            dist_df = B.from_dict(
+            # Match the left frame's native backend. ``B.from_dict`` follows
+            # ``M5_BACKEND`` (often polars) while ``df`` is typically
+            # pandas-backed when callers pass a pandas frame — mixing them
+            # makes narwhals' join call ``dropna`` on a polars native and crash.
+            dist_df = nw.from_dict(
                 {
                     "ds": ds_vals,
                     "days_to_next_event": days_next,
                     "days_since_last_event": days_prev,
-                }
+                },
+                backend=df.implementation,
             )
             df = df.join(dist_df, on="ds", how="left")
     return df
