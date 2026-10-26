@@ -13,7 +13,7 @@ References
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -39,8 +39,13 @@ def _resolve_device() -> torch.device:
 def build_toto_model(
     model_name: str = DEFAULT_MODEL_NAME,
     device: torch.device | None = None,
-) -> torch.nn.Module:
-    """Load a TOTO 2.0 model from HuggingFace."""
+) -> Any:
+    """Load a TOTO 2.0 model from HuggingFace.
+
+    Returns ``Any`` rather than ``torch.nn.Module``: Toto2Model exposes
+    ``.forecast``, which Module stubs don't, and a ``type: ignore`` on the
+    call site is unused in CI (no torch) under ``warn_unused_ignores``.
+    """
     from toto2 import Toto2Model
 
     if device is None:
@@ -72,7 +77,7 @@ def _series_to_tensor(
 
 
 def _forecast_batch(
-    model: torch.nn.Module,
+    model: Any,
     batch_tensor: torch.Tensor,
     horizon: int,
     decode_block_size: int | None,
