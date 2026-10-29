@@ -58,12 +58,17 @@ uv run m5 viz        # render pipeline.{svg,html}
 ## TOTO (zero-shot foundation model)
 
 Requires the `toto` dep group; always run with `--group toto` (pulls
-PyTorch). Not capped like other models — subsample with `M5_N_SERIES`:
+PyTorch). Not capped like other models — subsample with `M5_N_SERIES`.
+Hugging Face auth is required before the first weight download:
 
 ```bash
-uv run --group toto m5 cv toto --horizon 28 --n-windows 1
+uv run --group toto hf auth login   # or HF_TOKEN=hf_… in .env
+M5_N_SERIES=500 M5_N_WINDOWS=1 uv run --group toto m5 cv toto --horizon 28 --n-windows 1
 uv run --group toto m5 forecast toto --horizon 28
+make notebook-toto                  # notebooks/07_toto_forecast.ipynb
 ```
+
+See README “TOTO (zero-shot foundation model)” for license/accept details.
 
 ## Capped pipelines (RAM-constrained dev hardware)
 

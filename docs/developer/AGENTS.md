@@ -1,7 +1,7 @@
 # Working on M5 with an agentic harness
 
 > Audience: programmers driving an AI coding agent (Claude Code, OpenAI Codex
-> CLI, Gemini CLI, Aider, or any agents.md-aware tool) against this repo.
+> CLI, Gemini CLI, or any agents.md-aware tool) against this repo.
 > Goal: get the agent productive in minutes without breaking the
 > reproducibility contract or melting the dev box.
 
@@ -309,46 +309,6 @@ the prompt — handy for surgical context loads:
 The `--all-files` flag will fold every tracked markdown context file
 into the system prompt at session start.
 
-### Aider (FOSS, leading choice)
-
-**Status:** Works once you point it at the agent docs.
-
-```bash
-# Install
-pip install aider-chat
-# or: pipx install aider-chat
-# or: uv tool install aider-chat
-
-# Run with the agent docs preloaded
-aider \
-  --read AGENTS.md \
-  --read AI-CONTEXT.md \
-  --read docs/developer/AGENTS.md \
-  src/m5/<module>.py
-```
-
-Aider doesn't auto-discover `AGENTS.md`; pass it explicitly with
-`--read`. To make this permanent, drop a `.aider.conf.yml` at the repo
-root:
-
-```yaml
-# .aider.conf.yml
-model: sonnet                        # or gpt-5, deepseek/deepseek-chat, etc.
-read:
-  - AGENTS.md
-  - AI-CONTEXT.md
-  - docs/developer/AGENTS.md
-auto-test: true
-test-cmd: make test-fast
-lint-cmd:
-  python: uv run ruff check --fix
-```
-
-Aider has first-class support for many models including local ones via
-Ollama / LM Studio — see the project's docs. Inside the session,
-`/test` runs `test-cmd`, `/lint` runs `lint-cmd`, `/diff` shows the
-working diff before commit.
-
 ### Other agentic harnesses (brief)
 
 | Tool | Reads | Notes |
@@ -360,9 +320,8 @@ working diff before commit.
 | **Cline / Roo Code** | VSCode settings | System prompt = paste `AGENTS.md` body. |
 | **Anything with a system-prompt slot** | n/a | Paste `AGENTS.md`, attach `AI-CONTEXT.md`. |
 
-For local/FOSS-first setups, **aider** is the most polished. **opencode**
-is the closest equivalent in the agents.md ecosystem and is fully open
-source.
+For local/FOSS-first setups, **opencode** is the closest agents.md-native
+option and is fully open source.
 
 ---
 

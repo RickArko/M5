@@ -13,7 +13,8 @@ References
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -30,21 +31,58 @@ DEFAULT_BATCH_SIZE = 32
 DEFAULT_DECODE_BLOCK_SIZE: int | None = None
 
 
-def _resolve_device() -> torch.device:
+def _allow_omp_clash() -> None:
+    """Permit co-resident OpenMP runtimes (LightGBM libomp + PyTorch).
+
+    On Darwin, importing LightGBM then loading TOTO segfaults inside
+    ``torch.einsum`` during ``Toto2Model`` init unless this is set.  Safe
+    to set after libomp is already loaded.
+    """
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+
+
+def _resolve_device(device: str | torch.device | None = None) -> torch.device:
+    """Pick a TOTO-safe device.
+
+    CUDA when available, otherwise CPU.  MPS is rejected: TOTO's forecast
+    path hits an unsupported Metal sort axis and aborts the process.
+    Requesting ``cuda`` without a CUDA build raises instead of segfaulting
+    inside ``.to("cuda")``.
+    """
     import torch
 
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device is None:
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    resolved = torch.device(device) if not isinstance(device, torch.device) else device
+    if resolved.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError(
+            "device='cuda' requested but torch.cuda.is_available() is False. "
+            "Pass device='cpu' or omit device to auto-select."
+        )
+    if resolved.type == "mps":
+        raise ValueError(
+            "device='mps' is not supported by TOTO (Metal abort during forecast). "
+            "Use device='cpu' or omit device to auto-select."
+        )
+    return resolved
 
 
 def build_toto_model(
     model_name: str = DEFAULT_MODEL_NAME,
-    device: torch.device | None = None,
-) -> torch.nn.Module:
-    """Load a TOTO 2.0 model from HuggingFace."""
+    device: str | torch.device | None = None,
+) -> Any:
+    """Load a TOTO 2.0 model from HuggingFace.
+
+    Returns ``Any`` rather than ``torch.nn.Module``: Toto2Model exposes
+    ``.forecast``, which Module stubs don't, and a ``type: ignore`` on the
+    call site is unused in CI (no torch) under ``warn_unused_ignores``.
+    """
     from toto2 import Toto2Model
 
-    if device is None:
-        device = _resolve_device()
+    _allow_omp_clash()
+    device = _resolve_device(device)
     logger.info(f"build_toto_model: loading {model_name} on {device}")
     model = Toto2Model.from_pretrained(model_name)
     model = model.to(device).eval()
@@ -72,7 +110,7 @@ def _series_to_tensor(
 
 
 def _forecast_batch(
-    model: torch.nn.Module,
+    model: Any,
     batch_tensor: torch.Tensor,
     horizon: int,
     decode_block_size: int | None,

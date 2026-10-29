@@ -70,12 +70,16 @@ def build_lgbm_forecaster(
     lags: tuple[int, ...] = DEFAULT_LAGS,
     rolling_windows: tuple[int, ...] = DEFAULT_ROLLS,
     freq: str = "D",
-    n_jobs: int = -1,
+    n_jobs: int = 1,
     seed: int = SETTINGS.seed,
 ) -> MLForecast:
     """Construct an MLForecast with LightGBM and minimal date features.
 
     Defaults come from ``configs/m5/lgbm.yaml``. Pass kwargs to override per-call.
+
+    ``n_jobs`` defaults to 1: LightGBM's OpenMP build (``libomp``) segfaults on
+    Apple Silicon when ``n_jobs != 1``, and single-thread also matches the
+    reproducibility contract (``deterministic=True``).
     """
     recipe = _load_lgbm_recipe()
     assert recipe.model.kind == "lgbm"

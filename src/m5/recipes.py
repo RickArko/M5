@@ -168,7 +168,7 @@ def build_lgbm_from_recipe(
     recipe: Recipe,
     *,
     seed: int | None = None,
-    n_jobs: int = -1,
+    n_jobs: int = 1,
 ) -> Any:
     """Build an MLForecast (LightGBM) from a recipe.
 
@@ -176,14 +176,27 @@ def build_lgbm_from_recipe(
     ``configs/m5/lgbm.yaml`` is loaded. Seed is injected from
     :data:`SETTINGS.seed` so ``M5_SEED`` env override still works; pass
     ``seed=...`` to override per-call.
+
+    ``n_jobs`` defaults to 1 (see :func:`m5.models.lgbm.build_lgbm_forecaster`).
     """
     if not isinstance(recipe.model, LGBMRecipe):
         raise TypeError(f"build_lgbm_from_recipe: recipe.model.kind={recipe.model.kind!r}, expected 'lgbm'")
+
+    import os
+    import sys
 
     import lightgbm as lgb
     from mlforecast import MLForecast
     from mlforecast.lag_transforms import RollingMean
     from mlforecast.target_transforms import Differences
+
+    # LightGBM's libomp build segfaults on Apple Silicon when OpenMP uses >1
+    # thread (kernel death in notebooks, exit 139 on the CLI). Force single-
+    # thread there; elsewhere keep the caller's n_jobs.
+    if sys.platform == "darwin" and n_jobs != 1:
+        n_jobs = 1
+    if n_jobs == 1:
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
 
     seed_val = SETTINGS.seed if seed is None else seed
     params = {**recipe.model.params, "seed": seed_val}
